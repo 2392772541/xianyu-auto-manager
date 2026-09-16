@@ -1,0 +1,84 @@
+{
+  "": "listing-content.schema.json",
+  "title": "ListingContent",
+  "description": "重制后的商品文案集合，必须绑定并严格消费已选定的 selected_strategy_id",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "selected_strategy_id",
+    "title",
+    "description",
+    "bullet_points",
+    "keywords",
+    "cover_copy",
+    "delivery_note"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "selected_strategy_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 60
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 3000
+    },
+    "bullet_points": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "type": "string"
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 15,
+      "items": {
+        "type": "string"
+      }
+    },
+    "cover_copy": {
+      "type": "object",
+      "required": [
+        "headline",
+        "subheadline"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "subheadline": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "tag": {
+          "type": "string",
+          "maxLength": 10
+        }
+      }
+    },
+    "delivery_note": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "claim_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "文案中引用的所有证据声明 Claim ID 列表"
+    }
+  }
+}

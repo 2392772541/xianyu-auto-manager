@@ -1,0 +1,59 @@
+{
+  "name": "xianyu-material-downloader",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "desktop": "electron .",
+    "pack": "electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "playwright": "^1.55.0",
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "linkedom": "^0.18.13"
+  },
+  "main": "desktop.cjs",
+  "description": "闲鱼商品图文素材下载器",
+  "author": "Local Tools",
+  "build": {
+    "appId": "local.xianyu.materials",
+    "productName": "闲鱼素材下载器",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop.cjs",
+      "server.mjs",
+      "core.mjs",
+      "extract.mjs",
+      "index.html",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@img/**/*",
+      "node_modules/sharp/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build-browser",
+        "to": "browser",
+        "filter": [
+          "chromium-*/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "Xianyu-Materials-${version}-Windows-x64.exe"
+    }
+  }
+}

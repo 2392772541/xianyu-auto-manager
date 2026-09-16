@@ -1,0 +1,1045 @@
+{
+  "productDnaSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://local.xianyu-ai/schemas/product-dna.v1.schema.json",
+    "title": "ProductDNA",
+    "description": "针对不可变 SourceManifest 生成的客观商品理解、核心资产和风险信息快照（解耦主观商业评分）。",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_version",
+      "product_dna_id",
+      "job_id",
+      "revision_id",
+      "source_manifest_sha256",
+      "source_product_id",
+      "source_url",
+      "source_title",
+      "source_description",
+      "source_images",
+      "source_price",
+      "source_quality",
+      "product_type",
+      "product_category",
+      "target_customer",
+      "customer_problem",
+      "purchase_motivation",
+      "usage_scenario",
+      "core_content",
+      "core_benefits",
+      "selling_points",
+      "keywords",
+      "delivery_type",
+      "rights_status",
+      "risk_flags",
+      "unsupported_claims",
+      "missing_information",
+      "need_human_review",
+      "evidence_ids",
+      "sellable_offer_ref",
+      "created_at"
+    ],
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "description": "契约版本。",
+        "x-origin": "SYSTEM"
+      },
+      "product_dna_id": {
+        "type": "string",
+        "pattern": "^dna_[A-Za-z0-9_-]+$",
+        "description": "DNA 快照唯一 ID。",
+        "x-origin": "SYSTEM"
+      },
+      "job_id": {
+        "type": "string",
+        "pattern": "^job_[A-Za-z0-9_-]+$",
+        "description": "所属任务。",
+        "x-origin": "SYSTEM"
+      },
+      "revision_id": {
+        "type": "string",
+        "pattern": "^revision_[0-9]{3,}$",
+        "description": "产生该 DNA 的 Revision。",
+        "x-origin": "SYSTEM"
+      },
+      "source_manifest_sha256": {
+        "type": "string",
+        "pattern": "^[A-Fa-f0-9]{64}$",
+        "description": "绑定的来源快照哈希。",
+        "x-origin": "SYSTEM"
+      },
+      "source_product_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "采集系统原商品 ID。",
+        "x-origin": "SOURCE"
+      },
+      "source_url": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "uri",
+        "description": "原商品链接，未知为 null。",
+        "x-origin": "SOURCE"
+      },
+      "source_title": {
+        "type": "string",
+        "minLength": 1,
+        "description": "原标题原样副本。",
+        "x-origin": "SOURCE"
+      },
+      "source_description": {
+        "type": "string",
+        "description": "原描述原样副本。",
+        "x-origin": "SOURCE"
+      },
+      "source_images": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/sourceImage"
+        },
+        "description": "原图引用、顺序、尺寸和哈希。",
+        "x-origin": "SOURCE"
+      },
+      "source_price": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/money"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "原价格，未知为 null。",
+        "x-origin": "SOURCE_OR_HUMAN"
+      },
+      "source_quality": {
+        "$ref": "#/$defs/sourceQuality",
+        "description": "采集完整性与质量判断。",
+        "x-origin": "SYSTEM_DERIVED"
+      },
+      "product_type": {
+        "type": "string",
+        "enum": [
+          "PHYSICAL",
+          "VIRTUAL_RESOURCE",
+          "SERVICE",
+          "ACCOUNT_OR_ACCESS",
+          "MIXED",
+          "UNKNOWN"
+        ],
+        "description": "商品交付本质。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "product_category": {
+        "$ref": "#/$defs/category",
+        "description": "类目判断。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "target_customer": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 5,
+        "items": {
+          "$ref": "#/$defs/audienceInsight"
+        },
+        "description": "潜在目标人群，不是买家统计。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "customer_problem": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "$ref": "#/$defs/insight"
+        },
+        "description": "商品可能解决的问题。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "purchase_motivation": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "$ref": "#/$defs/insight"
+        },
+        "description": "购买动机假设。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "usage_scenario": {
+        "type": "array",
+        "maxItems": 10,
+        "items": {
+          "$ref": "#/$defs/insight"
+        },
+        "description": "使用场景。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "core_content": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/$defs/coreContent"
+        },
+        "description": "真正交付的实体、文件、服务或使用权。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "core_benefits": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/claimAsset"
+        },
+        "description": "有证据支持的收益。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "selling_points": {
+        "type": "array",
+        "maxItems": 10,
+        "items": {
+          "$ref": "#/$defs/claimAsset"
+        },
+        "description": "未营销化的候选卖点。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "keywords": {
+        "type": "array",
+        "maxItems": 30,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "实体、人群、场景和交付关键词。",
+        "x-origin": "AI_ANALYSIS"
+      },
+      "delivery_type": {
+        "type": "string",
+        "enum": [
+          "PHYSICAL_SHIPPING",
+          "DIGITAL_FILE",
+          "CLOUD_LINK",
+          "ACCOUNT_ACCESS",
+          "REMOTE_SERVICE",
+          "LOCAL_SERVICE",
+          "MIXED",
+          "UNKNOWN"
+        ],
+        "description": "真实交付方式。",
+        "x-origin": "SOURCE_OR_AI"
+      },
+      "rights_status": {
+        "type": "string",
+        "enum": [
+          "USER_OWNED",
+          "LICENSED",
+          "PUBLIC_DOMAIN",
+          "UNKNOWN",
+          "NOT_AUTHORIZED"
+        ],
+        "description": "原始素材与知识产权权利状态。",
+        "x-origin": "AI_OR_HUMAN"
+      },
+      "risk_flags": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/riskFlag"
+        },
+        "description": "来源、权利、平台、隐私、交付等风险。",
+        "x-origin": "AI_OR_SYSTEM"
+      },
+      "unsupported_claims": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/unsupportedClaim"
+        },
+        "description": "不得继续使用或需确认的声明。",
+        "x-origin": "AI_OR_POLICY"
+      },
+      "missing_information": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/missingInfo"
+        },
+        "description": "影响理解、履约或发布的信息缺口。",
+        "x-origin": "AI_OR_SYSTEM"
+      },
+      "need_human_review": {
+        "type": "boolean",
+        "description": "是否必须人工介入。",
+        "x-origin": "SYSTEM_DERIVED"
+      },
+      "evidence_ids": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^evidence_[A-Za-z0-9_-]+$"
+        },
+        "description": "DNA 使用的证据 ID 列表。",
+        "x-origin": "SYSTEM_DERIVED"
+      },
+      "sellable_offer_ref": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "关联的我方实际可售履约包引用，未关联为 null。",
+        "x-origin": "SYSTEM"
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "快照创建时间。",
+        "x-origin": "SYSTEM"
+      }
+    },
+    "$defs": {
+      "sourceImage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "image_id",
+          "relative_path",
+          "sha256",
+          "position",
+          "width",
+          "height",
+          "mime_type"
+        ],
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "pattern": "^image_[A-Za-z0-9_-]+$"
+          },
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "image/gif"
+            ]
+          },
+          "is_cover": {
+            "type": "boolean"
+          },
+          "detected_text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "watermark_detected": {
+            "type": "boolean"
+          }
+        }
+      },
+      "money": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "currency",
+          "amount"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string",
+            "const": "CNY"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "sourceQuality": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "has_title",
+          "has_description",
+          "image_count",
+          "text_length",
+          "ocr_applied",
+          "issues"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETE",
+              "PARTIAL",
+              "INVALID"
+            ]
+          },
+          "has_title": {
+            "type": "boolean"
+          },
+          "has_description": {
+            "type": "boolean"
+          },
+          "image_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text_length": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ocr_applied": {
+            "type": "boolean"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "category": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "primary_category",
+          "sub_category",
+          "confidence"
+        ],
+        "properties": {
+          "primary_category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sub_category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "audienceInsight": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "segment",
+          "rationale",
+          "evidence_ids"
+        ],
+        "properties": {
+          "segment": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "insight": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content",
+          "evidence_ids"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "coreContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_name",
+          "item_type",
+          "quantity",
+          "format",
+          "evidence_ids"
+        ],
+        "properties": {
+          "item_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "item_type": {
+            "type": "string",
+            "enum": [
+              "DOCUMENT",
+              "VIDEO",
+              "AUDIO",
+              "SOFTWARE_CODE",
+              "TEMPLATE",
+              "GRAPHIC_ASSET",
+              "HARDWARE",
+              "PHYSICAL_ITEM",
+              "OTHER"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "claimAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_text",
+          "evidence_ids",
+          "confidence"
+        ],
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "riskFlag": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "risk_code",
+          "severity",
+          "description",
+          "action_required"
+        ],
+        "properties": {
+          "risk_code": {
+            "type": "string",
+            "enum": [
+              "COPYRIGHT_OR_LICENSE",
+              "PROHIBITED_KEYWORD",
+              "INSUFFICIENT_INFO",
+              "OVERPROMISE",
+              "FACT_CONFLICT",
+              "FULFILLMENT_RISK",
+              "OTHER"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "INFO",
+              "WARNING",
+              "CRITICAL"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action_required": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "CLEAN_TEXT",
+              "REPLACE_IMAGE",
+              "CONFIRM_FULFILLMENT",
+              "FORCE_DROP",
+              "MANUAL_REVIEW"
+            ]
+          }
+        }
+      },
+      "unsupportedClaim": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_text",
+          "reason",
+          "suggested_action"
+        ],
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "suggested_action": {
+            "type": "string",
+            "enum": [
+              "REMOVE",
+              "DOWNGRADE",
+              "VERIFY_WITH_HUMAN"
+            ]
+          }
+        }
+      },
+      "missingInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field_name",
+          "impact",
+          "suggested_recovery"
+        ],
+        "properties": {
+          "field_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "BLOCKING"
+            ]
+          },
+          "suggested_recovery": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "sellableOfferSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://local.xianyu-ai/schemas/sellable-offer.v1.schema.json",
+    "title": "SellableOffer",
+    "description": "我方实际拥有、已核验且能够履约交付的真实可售商品资产包规范。",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_version",
+      "offer_id",
+      "source_product_id",
+      "actual_contents",
+      "fulfillment_type",
+      "fulfillment_assets",
+      "rights_status",
+      "quantity_verified",
+      "deliverable_verified",
+      "fulfillment_status",
+      "human_confirmed",
+      "created_at"
+    ],
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "description": "契约版本。"
+      },
+      "offer_id": {
+        "type": "string",
+        "pattern": "^offer_[A-Za-z0-9_-]+$",
+        "description": "实际可售包唯一 ID。"
+      },
+      "source_product_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "关联的参考来源商品 ID。"
+      },
+      "actual_contents": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "我方实际拥有的交付物清单（如具体文件、课件、代码包、卡密类型）。"
+      },
+      "fulfillment_type": {
+        "type": "string",
+        "enum": [
+          "NETDISK_AUTO",
+          "NETDISK_MANUAL",
+          "CARD_CODE",
+          "MANUAL_SERVICE",
+          "TUTORIAL_FILE",
+          "PHYSICAL_EXPRESS"
+        ],
+        "description": "实际交付方式。"
+      },
+      "fulfillment_assets": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/$defs/fulfillmentAsset"
+        },
+        "description": "实际履约交付资产集合（网盘链接、本地文件、卡密池等）。"
+      },
+      "rights_status": {
+        "type": "string",
+        "enum": [
+          "USER_OWNED",
+          "LICENSED",
+          "PUBLIC_DOMAIN",
+          "UNKNOWN",
+          "NOT_AUTHORIZED"
+        ],
+        "description": "该交付资产的知识产权与转售授权状态。"
+      },
+      "quantity_verified": {
+        "type": "boolean",
+        "description": "资产数量（如题库数、模板套数）是否经人工或脚本核验。"
+      },
+      "deliverable_verified": {
+        "type": "boolean",
+        "description": "交付载体（网盘链接有效性、提取码、解压密码）是否测试可用。"
+      },
+      "fulfillment_status": {
+        "type": "string",
+        "enum": [
+          "NOT_CHECKED",
+          "READY",
+          "INCOMPLETE",
+          "UNAVAILABLE"
+        ],
+        "description": "履约就绪状态。只有 READY 状态才允许最终批准出库。"
+      },
+      "human_confirmed": {
+        "type": "boolean",
+        "description": "是否由运营/店主人工确认我方交付无误。"
+      },
+      "operator": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "确认人标识。"
+      },
+      "verified_at": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "date-time",
+        "description": "履约核验时间。"
+      },
+      "notes": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "交付注意事项与发货附言。"
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "创建时间。"
+      }
+    },
+    "$defs": {
+      "fulfillmentAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "asset_name",
+          "asset_type",
+          "storage_location_ref",
+          "verified"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "pattern": "^fas_[A-Za-z0-9_-]+$"
+          },
+          "asset_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "asset_type": {
+            "type": "string",
+            "enum": [
+              "BAIDU_NETDISK",
+              "QUARK_NETDISK",
+              "ALIYUN_DRIVE",
+              "LOCAL_ARCHIVE",
+              "CODE_TOKEN",
+              "OTHER"
+            ]
+          },
+          "storage_location_ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "资产存储引用或脱敏链接标识。"
+          },
+          "file_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "sha256_checksum": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "productScorecardSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://local.xianyu-ai/schemas/product-scorecard.v1.schema.json",
+    "title": "ProductScorecard",
+    "description": "对 ProductDNA 提取事实的启发式商业评价卡（1-5分制真实可度量指标，解耦客观理解）。",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_version",
+      "scorecard_id",
+      "job_id",
+      "revision_id",
+      "product_dna_id",
+      "demand_signal_strength",
+      "positioning_clarity",
+      "differentiation_potential",
+      "remake_feasibility",
+      "virtual_product_fit_score",
+      "scorecard_confidence",
+      "score_basis",
+      "recommended_action",
+      "recommended_action_reason",
+      "limitations",
+      "evaluation_policy_version",
+      "created_at"
+    ],
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "description": "契约版本。"
+      },
+      "scorecard_id": {
+        "type": "string",
+        "pattern": "^scorecard_[A-Za-z0-9_-]+$",
+        "description": "评分卡唯一 ID。"
+      },
+      "job_id": {
+        "type": "string",
+        "pattern": "^job_[A-Za-z0-9_-]+$"
+      },
+      "revision_id": {
+        "type": "string",
+        "pattern": "^revision_[0-9]{3,}$"
+      },
+      "product_dna_id": {
+        "type": "string",
+        "pattern": "^dna_[A-Za-z0-9_-]+$",
+        "description": "评价依据的 ProductDNA ID。"
+      },
+      "demand_signal_strength": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "需求信号强度 (1-5)：同行文案痛点清晰度、提问点与动销暗示。"
+      },
+      "positioning_clarity": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "定位清晰度 (1-5)：目标受众与核心使用场景是否鲜明。"
+      },
+      "differentiation_potential": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "差异化潜力 (1-5)：在同质化中挖掘细分切入角色的可能性。"
+      },
+      "remake_feasibility": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "重制可行性 (1-5)：素材完整性、履约复杂度与合规门槛综合判断。"
+      },
+      "virtual_product_fit_score": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "minimum": 1,
+        "maximum": 5,
+        "description": "虚拟商品适配度 (1-5)；非虚拟商品为 null。"
+      },
+      "scorecard_confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "评分可靠度辅助估值，不作为自动流转硬门槛。"
+      },
+      "score_basis": {
+        "type": "array",
+        "minItems": 4,
+        "items": {
+          "$ref": "#/$defs/scoreBasisItem"
+        },
+        "description": "逐项可度量指标的评估理由、分级与依据。"
+      },
+      "recommended_action": {
+        "type": "string",
+        "enum": [
+          "KEEP",
+          "REMAKE",
+          "DROP"
+        ],
+        "description": "推荐决策方向。"
+      },
+      "recommended_action_reason": {
+        "type": "string",
+        "minLength": 10,
+        "description": "推荐动作核心理由。"
+      },
+      "limitations": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string"
+        },
+        "description": "当前评估局限性说明（如未联网检索全平台销量/竞争品数量）。"
+      },
+      "evaluation_policy_version": {
+        "type": "string",
+        "description": "评分规则策略版本。"
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "$defs": {
+      "scoreBasisItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric_name",
+          "score",
+          "rating",
+          "reason",
+          "evidence_ids",
+          "limitations"
+        ],
+        "properties": {
+          "metric_name": {
+            "type": "string",
+            "enum": [
+              "DEMAND_SIGNAL",
+              "POSITIONING_CLARITY",
+              "DIFFERENTIATION_POTENTIAL",
+              "REMAKE_FEASIBILITY",
+              "VIRTUAL_FIT"
+            ]
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "rating": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 5
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

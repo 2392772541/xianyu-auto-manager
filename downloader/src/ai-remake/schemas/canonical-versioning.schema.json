@@ -1,0 +1,116 @@
+{
+  "$id": "canonical-versioning.schema.json",
+  "title": "CanonicalVersioning",
+  "description": "权威不可变版本元数据定义（Job / Revision / Version 关系）",
+  "type": "object",
+  "required": [
+    "job_id",
+    "source_product_id",
+    "current_status",
+    "revisions",
+    "published_versions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "pattern": "^job_[a-zA-Z0-9_-]{8,32}$"
+    },
+    "source_product_id": {
+      "type": "string"
+    },
+    "current_status": {
+      "$ref": "enums.schema.json#/definitions/WorkflowStatus"
+    },
+    "active_revision_id": {
+      "type": "string"
+    },
+    "revisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "revision_id",
+          "created_at",
+          "status",
+          "change_reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "pattern": "^rev_[a-zA-Z0-9_-]{8,32}$"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "IN_PROGRESS",
+              "NEEDS_INPUT",
+              "NEEDS_REVIEW",
+              "APPROVED",
+              "REJECTED",
+              "STALE"
+            ]
+          },
+          "change_reason": {
+            "type": "string"
+          },
+          "selected_strategy_id": {
+            "type": "string"
+          },
+          "is_read_only": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    "published_versions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version_id",
+          "derived_from_revision_id",
+          "published_at",
+          "package_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+          },
+          "derived_from_revision_id": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "package_ref": {
+            "type": "string"
+          },
+          "package_hash": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "STALE",
+              "ARCHIVED"
+            ]
+          },
+          "stale_reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

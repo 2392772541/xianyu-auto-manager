@@ -1,0 +1,132 @@
+{
+  "": "image-plan.schema.json",
+  "title": "ImagePlan",
+  "description": "图片设计制作方案（出方案不作图），包含原图权利门禁与重制动作约束",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "selected_strategy_id",
+    "rights_status",
+    "main_image",
+    "detail_images",
+    "visual_theme"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "selected_strategy_id": {
+      "type": "string"
+    },
+    "rights_status": {
+      "": "enums.schema.json#/definitions/RightsStatus"
+    },
+    "main_image": {
+      "type": "object",
+      "required": [
+        "action",
+        "layout_description",
+        "headline_text",
+        "subheadline_text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "": "enums.schema.json#/definitions/ImageAction"
+        },
+        "layout_description": {
+          "type": "string"
+        },
+        "headline_text": {
+          "type": "string"
+        },
+        "subheadline_text": {
+          "type": "string"
+        },
+        "source_image_ref": {
+          "type": "string"
+        },
+        "rebuild_prompt": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "allowed_usage": {
+          "$ref": "enums.schema.json#/definitions/AssetAllowedUsage"
+        },
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "detail_images": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "page_number",
+          "action",
+          "focus",
+          "content_summary"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "action": {
+            "": "enums.schema.json#/definitions/ImageAction"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "content_summary": {
+            "type": "string"
+          },
+          "source_image_ref": {
+            "type": "string"
+          },
+          "rebuild_prompt": {
+            "type": "string"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "allowed_usage": {
+            "$ref": "enums.schema.json#/definitions/AssetAllowedUsage"
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "visual_theme": {
+      "type": "object",
+      "required": [
+        "color_tone",
+        "style_name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "color_tone": {
+          "type": "string"
+        },
+        "style_name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

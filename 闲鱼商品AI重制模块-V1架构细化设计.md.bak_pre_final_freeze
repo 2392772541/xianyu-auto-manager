@@ -1,0 +1,1542 @@
+# 闲鱼商品 AI 重制模块 V1：数据模型、Workflow 与 AI 节点契约
+
+> 架构细化日期：2026-09-15  
+> 上游依据：`闲鱼商品AI重制模块-V1架构调研.md`  
+> 当前阶段：产品逻辑与契约冻结前设计  
+> 明确边界：不编写业务代码、不修改采集模块、不新增 Python、不新增数据库、不自动生成图片、不自动发布。
+
+---
+
+## 0. 本文要解决什么
+
+本文将既有概念方案细化成下一阶段可以直接实现和测试的契约，确定：
+
+1. Product DNA（商品 DNA）的准确含义和 JSON Schema；
+2. 一个商品产生最多三个重制策略的数据结构；
+3. V1 固定 Workflow 的状态、输入、输出、失败条件和自动继续规则；
+4. 五个专用 AI 节点的输入输出边界；
+5. Source Product、Job、Revision、Version 的版本关系；
+6. 所有生成声明如何回溯到原文、原图或人工确认；
+7. 在现有 Electron + Node.js 项目中应新增什么目录；
+8. 下一阶段开发顺序和 10 个真实商品的验证方法。
+
+本文中的 JSON 是数据契约和示例，不是业务代码。
+
+---
+
+# 第一部分：领域模型与统一术语
+
+## 1.1 核心实体
+
+| 术语 | 精确定义 | 是否可修改 |
+|---|---|---:|
+| `SourceProduct` | 采集模块生成的原始商品目录及其清单 | 永远只读 |
+| `SourceManifest` | 对原始标题、描述、图片哈希、采集完整性等计算出的来源快照 | 不可修改；来源变化时生成新快照 |
+| `ProductDNA` | 对一个来源快照的结构化理解、价值评分、核心资产和风险说明 | AI 输出不可覆盖；变更产生新 Revision |
+| `ProductScorecard` | Product Scorer 对 Product DNA 分析结果给出的启发式评分 | 版本化保存 |
+| `ProductRemakeStrategy` | 某个商品的一种具体重制定位方向 | 版本化保存，最多三个候选 |
+| `RemakeJob` | 用户对一个 SourceProduct 发起的一次完整重制任务 | 状态可推进，历史事件不可删除 |
+| `RemakeRevision` | Job 内一次不可变的 AI/人工编辑结果快照 | 不可修改；修改产生下一 Revision |
+| `ProductVersion` | 经人工批准、可以导出为待发布商品的正式快照 | 不可覆盖；新批准结果产生新 Version |
+| `Claim` | Product DNA、策略、标题、描述或图片文案中的一个可验证声明 | 版本化保存 |
+| `Evidence` | 支持、削弱或反驳某个 Claim 的来源证据 | 原始证据不可修改，人工确认需记录确认者和时间 |
+| `PendingListingPackage` | 已批准的待发布数据包 | 不等于已经发布，也不等于平台审核通过 |
+
+## 1.2 三个关键边界
+
+### Product DNA 不是销售文案
+
+Product DNA 回答“这是什么、有何价值、风险是什么”，不负责写吸引人的标题，也不应引入原始证据中不存在的新事实。
+
+### Revision 不是 Version
+
+- `Revision` 是技术和审核过程中的草稿快照，可能被拒绝；
+- `Version` 是从某个已批准 Revision 晋升出来的正式待发布版本；
+- 每次 AI 重跑或人工修改都必须新建 Revision，不能覆盖原 Revision。
+
+### 评分不是市场事实
+
+V1 不联网进行真实市场调查。因此 `market_demand_score` 和 `competition_score` 都是基于现有素材的代理评分，不能描述成真实销量、搜索量或全平台竞争数据。评分必须同时给出置信度、理由、证据和局限。
+
+---
+
+# 第二部分：Product DNA 模型
+
+## 2.1 Product DNA 生命周期
+
+```text
+Product Analyst
+  → 生成理解、核心资产、风险和初始证据
+
+Product Scorer
+  → 读取分析结果
+  → 补充四项评分、推荐动作和评分依据
+  → 形成完整 ProductDNA Revision
+```
+
+Product Analyst 不直接决定 KEEP / REMAKE / DROP；Product Scorer 不重新解释图片和正文，只能使用 Analyst 提取的事实、风险与证据。
+
+## 2.2 Product DNA JSON Schema
+
+规范：JSON Schema Draft 2020-12。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.xianyu-ai/schemas/product-dna.v1.schema.json",
+  "title": "ProductDNA",
+  "description": "针对一个不可变 SourceManifest 生成的完整商品理解、价值评分、核心资产和风险快照。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "product_dna_id", "job_id", "revision_id",
+    "source_manifest_sha256", "source_product_id", "source_url",
+    "source_title", "source_description", "source_images", "source_price",
+    "source_quality", "product_type", "product_category", "target_customer",
+    "customer_problem", "purchase_motivation", "usage_scenario",
+    "market_demand_score", "competition_score", "differentiation_score",
+    "virtual_product_fit_score", "score_confidence", "score_basis",
+    "recommended_action", "recommended_action_reason", "core_content",
+    "core_benefits", "selling_points", "keywords", "delivery_type",
+    "risk_flags", "unsupported_claims", "missing_information",
+    "need_human_review", "evidence_ids", "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0", "description": "契约版本。", "x-origin": "SYSTEM" },
+    "product_dna_id": { "type": "string", "pattern": "^dna_[A-Za-z0-9_-]+$", "description": "DNA 快照唯一 ID。", "x-origin": "SYSTEM" },
+    "job_id": { "type": "string", "pattern": "^job_[A-Za-z0-9_-]+$", "description": "所属任务。", "x-origin": "SYSTEM" },
+    "revision_id": { "type": "string", "pattern": "^revision_[0-9]{3,}$", "description": "产生该 DNA 的 Revision。", "x-origin": "SYSTEM" },
+    "source_manifest_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$", "description": "绑定的来源快照哈希。", "x-origin": "SYSTEM" },
+    "source_product_id": { "type": "string", "minLength": 1, "description": "采集系统原商品 ID。", "x-origin": "SOURCE" },
+    "source_url": { "type": ["string", "null"], "format": "uri", "description": "原商品链接，未知为 null。", "x-origin": "SOURCE" },
+    "source_title": { "type": "string", "minLength": 1, "description": "原标题原样副本。", "x-origin": "SOURCE" },
+    "source_description": { "type": "string", "description": "原描述原样副本。", "x-origin": "SOURCE" },
+    "source_images": { "type": "array", "items": { "$ref": "#/$defs/sourceImage" }, "description": "原图引用、顺序、尺寸和哈希。", "x-origin": "SOURCE" },
+    "source_price": { "oneOf": [{ "$ref": "#/$defs/money" }, { "type": "null" }], "description": "原价格，未知为 null。", "x-origin": "SOURCE_OR_HUMAN" },
+    "source_quality": { "$ref": "#/$defs/sourceQuality", "description": "采集完整性。", "x-origin": "SYSTEM_DERIVED" },
+    "product_type": { "type": "string", "enum": ["PHYSICAL", "VIRTUAL_RESOURCE", "SERVICE", "ACCOUNT_OR_ACCESS", "MIXED", "UNKNOWN"], "description": "商品交付本质。", "x-origin": "AI_ANALYSIS" },
+    "product_category": { "$ref": "#/$defs/category", "description": "类目判断。", "x-origin": "AI_ANALYSIS" },
+    "target_customer": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "$ref": "#/$defs/audienceInsight" }, "description": "潜在目标人群，不是买家统计。", "x-origin": "AI_ANALYSIS" },
+    "customer_problem": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/insight" }, "description": "商品可能解决的问题。", "x-origin": "AI_ANALYSIS" },
+    "purchase_motivation": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/insight" }, "description": "购买动机假设。", "x-origin": "AI_ANALYSIS" },
+    "usage_scenario": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/insight" }, "description": "使用场景。", "x-origin": "AI_ANALYSIS" },
+    "market_demand_score": { "type": "integer", "minimum": 0, "maximum": 100, "description": "需求代理评分，不代表真实销量。", "x-origin": "AI_SCORING" },
+    "competition_score": { "type": "integer", "minimum": 0, "maximum": 100, "description": "同质化竞争代理评分，越高竞争越强。", "x-origin": "AI_SCORING" },
+    "differentiation_score": { "type": "integer", "minimum": 0, "maximum": 100, "description": "根据当前事实形成差异化的可能性。", "x-origin": "AI_SCORING" },
+    "virtual_product_fit_score": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "虚拟商品适配度；非虚拟为 null。", "x-origin": "AI_SCORING" },
+    "score_confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "评分整体置信度。", "x-origin": "AI_SCORING" },
+    "score_basis": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scoreBasis" }, "description": "逐项评分依据和局限。", "x-origin": "AI_SCORING" },
+    "recommended_action": { "type": "string", "enum": ["KEEP", "REMAKE", "DROP"], "description": "建议保留优化、重制或放弃。", "x-origin": "AI_SCORING" },
+    "recommended_action_reason": { "type": "string", "minLength": 10, "description": "动作原因。", "x-origin": "AI_SCORING" },
+    "core_content": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/coreContent" }, "description": "真正交付的实体、文件、服务或使用权。", "x-origin": "AI_ANALYSIS" },
+    "core_benefits": { "type": "array", "items": { "$ref": "#/$defs/claimAsset" }, "description": "有证据支持的收益。", "x-origin": "AI_ANALYSIS" },
+    "selling_points": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/claimAsset" }, "description": "未营销化的候选卖点。", "x-origin": "AI_ANALYSIS" },
+    "keywords": { "type": "array", "maxItems": 30, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "实体、人群、场景和交付关键词。", "x-origin": "AI_ANALYSIS" },
+    "delivery_type": { "type": "string", "enum": ["PHYSICAL_SHIPPING", "DIGITAL_FILE", "CLOUD_LINK", "ACCOUNT_ACCESS", "REMOTE_SERVICE", "LOCAL_SERVICE", "MIXED", "UNKNOWN"], "description": "真实交付方式。", "x-origin": "SOURCE_OR_AI" },
+    "risk_flags": { "type": "array", "items": { "$ref": "#/$defs/riskFlag" }, "description": "来源、权利、平台、隐私、交付等风险。", "x-origin": "AI_OR_SYSTEM" },
+    "unsupported_claims": { "type": "array", "items": { "$ref": "#/$defs/unsupportedClaim" }, "description": "不得继续使用或需确认的声明。", "x-origin": "AI_OR_POLICY" },
+    "missing_information": { "type": "array", "items": { "$ref": "#/$defs/missingInfo" }, "description": "影响理解、评分、定价或发布的信息缺口。", "x-origin": "AI_OR_SYSTEM" },
+    "need_human_review": { "type": "boolean", "description": "是否必须人工介入。", "x-origin": "SYSTEM_DERIVED" },
+    "evidence_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^evidence_[A-Za-z0-9_-]+$" }, "description": "DNA 使用的证据。", "x-origin": "SYSTEM_DERIVED" },
+    "created_at": { "type": "string", "format": "date-time", "description": "快照创建时间。", "x-origin": "SYSTEM" }
+  },
+  "$defs": {
+    "sourceImage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["image_id", "relative_path", "sha256", "position", "width", "height", "mime_type"],
+      "properties": {
+        "image_id": { "type": "string", "pattern": "^image_[A-Za-z0-9_-]+$" },
+        "relative_path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "position": { "type": "integer", "minimum": 1 },
+        "width": { "type": ["integer", "null"], "minimum": 1 },
+        "height": { "type": ["integer", "null"], "minimum": 1 },
+        "mime_type": { "type": ["string", "null"] },
+        "role_hint": { "type": ["string", "null"], "enum": ["COVER", "DETAIL", "PROOF", "DELIVERY", "UNKNOWN", null] }
+      }
+    },
+    "money": {
+      "type": "object", "additionalProperties": false,
+      "required": ["amount", "currency", "source"],
+      "properties": {
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "const": "CNY" },
+        "source": { "type": "string", "enum": ["SOURCE_METADATA", "SOURCE_TEXT", "HUMAN_CONFIRMED"] }
+      }
+    },
+    "sourceQuality": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "text_expanded", "image_set_complete", "missing_fields", "warnings"],
+      "properties": {
+        "status": { "type": "string", "enum": ["COMPLETE", "PARTIAL", "INVALID"] },
+        "text_expanded": { "type": "boolean" },
+        "image_set_complete": { "type": "boolean" },
+        "missing_fields": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "category": {
+      "type": "object", "additionalProperties": false,
+      "required": ["primary", "secondary", "tags", "confidence", "evidence_ids"],
+      "properties": {
+        "primary": { "type": "string", "minLength": 1 },
+        "secondary": { "type": ["string", "null"] },
+        "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "audienceInsight": {
+      "type": "object", "additionalProperties": false,
+      "required": ["segment", "need", "confidence", "evidence_ids"],
+      "properties": {
+        "segment": { "type": "string", "minLength": 1 },
+        "need": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "insight": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text", "confidence", "evidence_ids", "is_inference"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "is_inference": { "type": "boolean" }
+      }
+    },
+    "scoreBasis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["score_name", "score", "reason", "evidence_ids", "limitations"],
+      "properties": {
+        "score_name": { "type": "string", "enum": ["MARKET_DEMAND", "COMPETITION", "DIFFERENTIATION", "VIRTUAL_PRODUCT_FIT"] },
+        "score": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "coreContent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["content_id", "name", "content_type", "description", "quantity", "confidence", "evidence_ids"],
+      "properties": {
+        "content_id": { "type": "string", "pattern": "^content_[A-Za-z0-9_-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "content_type": { "type": "string", "enum": ["PHYSICAL_ITEM", "DIGITAL_FILE", "LINK", "ACCESS_RIGHT", "SERVICE", "BONUS", "UNKNOWN"] },
+        "description": { "type": "string" },
+        "quantity": { "type": ["number", "string", "null"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "claimAsset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim_id", "text", "confidence", "evidence_ids"],
+      "properties": {
+        "claim_id": { "type": "string", "pattern": "^claim_[A-Za-z0-9_-]+$" },
+        "text": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "riskFlag": {
+      "type": "object", "additionalProperties": false,
+      "required": ["risk_id", "type", "severity", "description", "blocking", "evidence_ids"],
+      "properties": {
+        "risk_id": { "type": "string", "pattern": "^risk_[A-Za-z0-9_-]+$" },
+        "type": { "type": "string", "enum": ["SOURCE_INCOMPLETE", "FACT_CONFLICT", "COPYRIGHT_OR_LICENSE", "PLATFORM_POLICY", "PRIVACY", "DELIVERY_UNCLEAR", "CONDITION_UNCLEAR", "ACCOUNT_OR_ACCESS", "UNSUPPORTED_PROMISE", "OTHER"] },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "description": { "type": "string", "minLength": 1 },
+        "blocking": { "type": "boolean" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "unsupportedClaim": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim", "reason", "source_reference", "action"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "source_reference": { "type": ["string", "null"] },
+        "action": { "type": "string", "enum": ["REMOVE", "HUMAN_CONFIRM", "DO_NOT_REPEAT"] }
+      }
+    },
+    "missingInfo": {
+      "type": "object", "additionalProperties": false,
+      "required": ["field", "reason", "impact", "required_before_publish"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "impact": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "BLOCKING"] },
+        "required_before_publish": { "type": "boolean" }
+      }
+    }
+  }
+}
+```
+
+## 2.3 Product DNA 顶层字段说明
+
+| 字段 | 用途 | 类型 | 必填 | 来源 |
+|---|---|---|---:|---|
+| `schema_version` | 契约兼容判断 | string | 是 | 系统 |
+| `product_dna_id` | DNA 快照唯一标识 | string | 是 | 系统 |
+| `job_id` | 关联一次重制任务 | string | 是 | 系统 |
+| `revision_id` | 关联不可变草稿快照 | string | 是 | 系统 |
+| `source_manifest_sha256` | 防止来源变化后误用旧结果 | SHA-256 string | 是 | 系统计算 |
+| `source_product_id` | 原商品 ID | string | 是 | 原始数据 |
+| `source_url` | 原商品链接 | string/null | 是，允许 null | 原始数据 |
+| `source_title` | 原标题原样副本 | string | 是 | 原始数据 |
+| `source_description` | 原描述原样副本 | string | 是 | 原始数据 |
+| `source_images` | 原图片引用、顺序、尺寸和哈希 | array | 是，可为空 | 原始数据 |
+| `source_price` | 原价格 | Money/null | 是，允许 null | 原始数据或人工确认 |
+| `source_quality` | COMPLETE/PARTIAL/INVALID 和缺失项 | object | 是 | 原始数据 + 系统判断 |
+| `product_type` | 实物、虚拟、服务、账号/访问权等 | enum | 是 | AI 分析 |
+| `product_category` | 主类目、子类目、标签和置信度 | object | 是 | AI 分析 |
+| `target_customer` | 潜在人群及需求 | array | 是 | AI 分析，属于推断 |
+| `customer_problem` | 可能解决的问题 | array | 是，可为空 | AI 分析 |
+| `purchase_motivation` | 潜在购买动机 | array | 是，可为空 | AI 分析 |
+| `usage_scenario` | 使用场景 | array | 是，可为空 | AI 分析 |
+| `market_demand_score` | 素材内需求代理评分 | integer 0–100 | 是 | AI 评分 |
+| `competition_score` | 同质化竞争代理评分，越高越难 | integer 0–100 | 是 | AI 评分 |
+| `differentiation_score` | 可形成差异化的能力 | integer 0–100 | 是 | AI 评分 |
+| `virtual_product_fit_score` | 虚拟商品适配度；非虚拟为 null | integer/null | 是 | AI 评分 |
+| `score_confidence` | 评分可靠性 | number 0–1 | 是 | AI 评分 |
+| `score_basis` | 每项分数的理由、证据和限制 | array | 是 | AI 评分 |
+| `recommended_action` | KEEP / REMAKE / DROP | enum | 是 | AI 评分 |
+| `recommended_action_reason` | 推荐动作原因 | string | 是 | AI 评分 |
+| `core_content` | 实际交付的商品核心内容 | array | 是 | AI 从原始数据提取 |
+| `core_benefits` | 有证据支持的收益 | array | 是，可为空 | AI 分析 |
+| `selling_points` | 尚未营销化的候选卖点 | array | 是，可为空 | AI 分析 |
+| `keywords` | 商品、人群、场景和交付物关键词 | array | 是，可为空 | AI 分析 |
+| `delivery_type` | 物流、数字文件、链接或服务等 | enum | 是 | 原始数据优先，否则 AI 分析 |
+| `risk_flags` | 来源、权利、违规、交付和事实风险 | array | 是，可为空 | 系统 + AI 分析 |
+| `unsupported_claims` | 不得继续使用或需确认的声明 | array | 是，可为空 | AI 分析 + 规则 |
+| `missing_information` | 影响重制或发布的缺失信息 | array | 是，可为空 | 系统 + AI 分析 |
+| `need_human_review` | 是否必须人工介入 | boolean | 是 | 系统按规则计算 |
+| `evidence_ids` | 使用的证据 ID 集合 | array | 是 | 系统汇总 |
+| `created_at` | 快照创建时间 | date-time | 是 | 系统 |
+
+## 2.4 Product DNA 不变量
+
+1. `source_manifest_sha256` 必须与当前来源清单一致；
+2. `source_title`、`source_description` 和 `source_images` 必须来自原始归档，AI 不得改写；
+3. `product_type != VIRTUAL_RESOURCE` 时，`virtual_product_fit_score` 必须为 `null`；
+4. `source_quality.status = INVALID` 时，不得进入 Product Analyst；
+5. `source_quality.status = PARTIAL` 时，`need_human_review` 必须为 `true`；
+6. 存在 `blocking=true` 风险时，不能自动形成可发布 Version；
+7. 所有 `core_benefits` 和 `selling_points` 必须关联 Evidence；
+8. AI 推断的人群、动机和场景必须标记 `is_inference=true`；
+9. `recommended_action=DROP` 时，不得自动生成营销内容；
+10. 评分依据不得声称使用了未提供的销量、搜索量、转化率或竞品数据。
+
+---
+
+# 第三部分：重制策略模型
+
+## 3.1 策略层职责
+
+```text
+Product DNA：它是什么、有什么、风险是什么
+        ↓
+ProductRemakeStrategy：卖给谁、突出什么、怎么表达
+        ↓
+Content / Image Plan：根据选中的策略执行
+```
+
+一个策略必须回答：面向谁、解决什么问题、突出哪个购买理由、为什么这样定位，以及标题、内容、图片和价格应如何统一。
+
+## 3.2 ProductRemakeStrategySet JSON Schema
+
+一个 Job 最多生成三个策略；每个 ProductRemakeStrategy 位于 `strategies` 中。
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.xianyu-ai/schemas/product-remake-strategy-set.v1.schema.json",
+  "title": "ProductRemakeStrategySet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "strategy_set_id", "job_id", "revision_id", "source_product_id", "product_dna_id", "source_manifest_sha256", "recommended_action", "strategies", "proposed_strategy_id", "created_at"],
+  "properties": {
+    "schema_version": { "const": "1.0", "x-origin": "SYSTEM" },
+    "strategy_set_id": { "type": "string", "pattern": "^strategy_set_[A-Za-z0-9_-]+$", "x-origin": "SYSTEM" },
+    "job_id": { "type": "string", "pattern": "^job_[A-Za-z0-9_-]+$", "x-origin": "SYSTEM" },
+    "revision_id": { "type": "string", "pattern": "^revision_[0-9]{3,}$", "x-origin": "SYSTEM" },
+    "source_product_id": { "type": "string", "minLength": 1, "x-origin": "SOURCE" },
+    "product_dna_id": { "type": "string", "pattern": "^dna_[A-Za-z0-9_-]+$", "x-origin": "SYSTEM" },
+    "source_manifest_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$", "x-origin": "SYSTEM" },
+    "recommended_action": { "type": "string", "enum": ["KEEP", "REMAKE", "DROP"], "x-origin": "AI_SCORING" },
+    "strategies": { "type": "array", "minItems": 0, "maxItems": 3, "items": { "$ref": "#/$defs/strategy" }, "x-origin": "AI_STRATEGY" },
+    "proposed_strategy_id": { "type": ["string", "null"], "pattern": "^strategy_[A-Za-z0-9_-]+$", "description": "系统提出的默认候选，DROP 时为 null。", "x-origin": "SYSTEM_DERIVED" },
+    "created_at": { "type": "string", "format": "date-time", "x-origin": "SYSTEM" }
+  },
+  "$defs": {
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy_id", "source_product_id", "product_dna_id", "strategy_index", "strategy_mode", "positioning", "target_customer", "main_selling_angle", "rationale", "title_direction", "content_direction", "image_direction", "price_strategy", "confidence_score", "evidence_ids", "assumptions", "risk_controls"],
+      "properties": {
+        "strategy_id": { "type": "string", "pattern": "^strategy_[A-Za-z0-9_-]+$", "description": "策略唯一 ID。" },
+        "source_product_id": { "type": "string", "minLength": 1, "description": "原商品 ID。" },
+        "product_dna_id": { "type": "string", "pattern": "^dna_[A-Za-z0-9_-]+$", "description": "绑定的 Product DNA。" },
+        "strategy_index": { "type": "integer", "minimum": 1, "maximum": 3, "description": "候选顺序。" },
+        "strategy_mode": { "type": "string", "enum": ["KEEP_OPTIMIZE", "REMAKE"], "description": "保守优化或重新定位。" },
+        "positioning": { "type": "string", "minLength": 10, "description": "一句话定位：为谁提供什么价值。" },
+        "target_customer": {
+          "type": "object", "additionalProperties": false,
+          "required": ["segment", "primary_need", "excluded_segments"],
+          "properties": {
+            "segment": { "type": "string", "minLength": 1 },
+            "primary_need": { "type": "string", "minLength": 1 },
+            "excluded_segments": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "main_selling_angle": { "type": "string", "minLength": 5, "description": "整个版本唯一主要销售角度。" },
+        "rationale": {
+          "type": "object", "additionalProperties": false,
+          "required": ["why_this_positioning", "why_this_customer", "why_it_can_win", "evidence_ids"],
+          "properties": {
+            "why_this_positioning": { "type": "string", "minLength": 10 },
+            "why_this_customer": { "type": "string", "minLength": 10 },
+            "why_it_can_win": { "type": "string", "minLength": 10 },
+            "evidence_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        },
+        "title_direction": {
+          "type": "object", "additionalProperties": false,
+          "required": ["formula", "must_include", "avoid", "tone"],
+          "properties": {
+            "formula": { "type": "string", "minLength": 1 },
+            "must_include": { "type": "array", "items": { "type": "string" } },
+            "avoid": { "type": "array", "items": { "type": "string" } },
+            "tone": { "type": "string", "minLength": 1 }
+          }
+        },
+        "content_direction": {
+          "type": "object", "additionalProperties": false,
+          "required": ["narrative_order", "must_explain", "must_disclose", "call_to_action_style"],
+          "properties": {
+            "narrative_order": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "must_explain": { "type": "array", "items": { "type": "string" } },
+            "must_disclose": { "type": "array", "items": { "type": "string" } },
+            "call_to_action_style": { "type": "string", "enum": ["NONE", "SOFT", "DIRECT"] }
+          }
+        },
+        "image_direction": {
+          "type": "object", "additionalProperties": false,
+          "required": ["treatment", "visual_theme", "cover_focus", "detail_structure", "consistency_anchor", "forbidden_visuals"],
+          "properties": {
+            "treatment": { "type": "string", "enum": ["KEEP", "CLEAN_ONLY", "OPTIMIZE", "REBUILD"] },
+            "visual_theme": { "type": "string", "minLength": 1 },
+            "cover_focus": { "type": "string", "minLength": 1 },
+            "detail_structure": { "type": "array", "items": { "type": "string" } },
+            "consistency_anchor": { "type": "array", "items": { "type": "string" } },
+            "forbidden_visuals": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "price_strategy": {
+          "type": "object", "additionalProperties": false,
+          "required": ["approach", "proposed_price", "price_range", "reason", "requires_human_confirmation"],
+          "properties": {
+            "approach": { "type": "string", "enum": ["KEEP_SOURCE", "LOWER", "RAISE", "TEST_RANGE", "MANUAL"] },
+            "proposed_price": { "oneOf": [{ "$ref": "#/$defs/money" }, { "type": "null" }] },
+            "price_range": {
+              "oneOf": [
+                { "type": "object", "additionalProperties": false, "required": ["min", "max", "currency"], "properties": { "min": { "type": "number", "minimum": 0 }, "max": { "type": "number", "minimum": 0 }, "currency": { "const": "CNY" } } },
+                { "type": "null" }
+              ]
+            },
+            "reason": { "type": "string", "minLength": 1 },
+            "requires_human_confirmation": { "type": "boolean" }
+          }
+        },
+        "confidence_score": { "type": "number", "minimum": 0, "maximum": 1, "description": "当前事实足以执行此定位的置信度。" },
+        "evidence_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": false, "required": ["text", "must_confirm"], "properties": { "text": { "type": "string", "minLength": 1 }, "must_confirm": { "type": "boolean" } } }
+        },
+        "risk_controls": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "money": {
+      "type": "object", "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": { "amount": { "type": "number", "minimum": 0 }, "currency": { "const": "CNY" } }
+    }
+  }
+}
+```
+
+## 3.3 策略数量与选择规则
+
+| 推荐动作 | 允许策略数 | 默认处理 |
+|---|---:|---|
+| `KEEP` | 1 | 只生成一个 `KEEP_OPTIMIZE` 策略，禁止为了重制强行改变商品本质 |
+| `REMAKE` | 1–3 | 生成互相有明显差异的定位方向 |
+| `DROP` | 0 | 不生成内容，直接进入人工审核，说明放弃原因 |
+
+多个策略必须满足：
+
+- 目标人群、核心销售角度或使用场景至少有一项实质不同；
+- 不能只是把同一句定位换三个近义词；
+- 每个策略必须说明 `why_this_positioning`；
+- 每个策略必须绑定 Product DNA 和 Evidence；
+- AI 只提出 `proposed_strategy_id`，它不是人工批准；
+- V1 默认只将置信度最高且无阻断风险的一个策略进入 Content Generator；
+- 用户选择其他策略时从该策略新建 Revision，不覆盖已有 Revision。
+
+## 3.4 定价策略边界
+
+V1 不做真实竞品调查。原价未知时不得生成精确价格，只能 `MANUAL`；任何具体新价格都必须 `requires_human_confirmation=true`。
+
+---
+
+# 第四部分：V1 Workflow 状态机
+
+## 4.1 主状态图
+
+```text
+START
+  │
+  ▼
+INPUT_CHECK
+  ├─ INVALID ───────────────► FAILED_BLOCKED
+  └─ PASS / PARTIAL
+          │
+          ▼
+PRODUCT_ANALYSIS
+  │
+  ▼
+PRODUCT_SCORING
+  ├─ DROP ──────────────────► HUMAN_REVIEW
+  └─ KEEP / REMAKE
+          │
+          ▼
+REMAKE_STRATEGY
+  │
+  ▼
+CONTENT_GENERATION
+  │
+  ▼
+IMAGE_PLAN
+  │
+  ▼
+VALIDATION
+  ├─ BLOCKING ERROR ────────► HUMAN_REVIEW
+  └─ PASS / WARNING
+          │
+          ▼
+HUMAN_REVIEW
+  ├─ APPROVE ───────────────► APPROVED
+  ├─ REJECT ────────────────► REJECTED
+  └─ REQUEST_REVISION ──────► 新建 Revision，从指定节点重跑
+```
+
+补充技术状态：`FAILED_RETRYABLE`、`FAILED_BLOCKED`、`STALE`、`CANCELLED`。它们不替代最终业务状态 APPROVED / REJECTED。
+
+## 4.2 状态定义
+
+### START
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | `source_product_directory`、用户触发信息、可选人工补充 |
+| 输出 | 新 `job.json`、`job_id`、`revision_001` |
+| 失败条件 | 目录不存在；无法建立独立输出目录；同一幂等键已有运行中 Job |
+| 自动继续 | 是，创建成功后进入 INPUT_CHECK |
+
+### INPUT_CHECK
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 原始 `商品信息.json`、`文案.txt`、图片目录和其他素材引用 |
+| 输出 | `source-manifest.json`、`normalized-input.json`、初始 Evidence |
+| 失败条件 | 所有文本为空；关键 JSON 无法解析；图片引用越界；哈希失败；输入路径逃逸商品目录 |
+| 自动继续 | COMPLETE 自动继续；PARTIAL 可继续但强制人工审核；INVALID 不继续 |
+
+INPUT_CHECK 是确定性程序节点，不调用 AI。
+
+### PRODUCT_ANALYSIS
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | `normalized-input.json`、原图引用、已登记 Evidence、分析规则版本 |
+| 输出 | `product-dna-analysis.json`、新增 Claim 和 Evidence 引用 |
+| 失败条件 | 输出不符合 Schema；未识别核心交付物；重要事实无证据；推断写成事实；引用不存在资源 |
+| 自动继续 | 结构和语义校验通过后继续；只允许有限格式修复重试 |
+
+### PRODUCT_SCORING
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | `product-dna-analysis.json`、评分和风险规则 |
+| 输出 | `product-scorecard.json`、完整 `product-dna.json`、recommended_action |
+| 失败条件 | 分数超界；虚拟适配分使用错误；无证据；声称未提供市场数据；评分与动作冲突 |
+| 自动继续 | KEEP/REMAKE 且无阻断风险时继续；DROP、PARTIAL、低置信度或阻断风险时进入 HUMAN_REVIEW |
+
+建议的确定性门控：来源 INVALID 不评分；来源 PARTIAL 必须人工审核；CRITICAL blocking risk 阻止自动继续；总置信度低于 0.60 不自动继续。动作不能只靠简单总分决定。
+
+### REMAKE_STRATEGY
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 完整 Product DNA、策略政策、最多策略数 3 |
+| 输出 | `strategy-set.json`、`proposed_strategy_id` |
+| 失败条件 | 超过三个；策略无实质差异；依赖 unsupported claim；未说明定位原因；DROP 仍生成策略 |
+| 自动继续 | 有合格默认策略、置信度不低于 0.60 且无阻断项时继续，否则人工审核 |
+
+### CONTENT_GENERATION
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | Product DNA、一个选定 Strategy、Evidence 注册表、内容规则 |
+| 输出 | `content-draft.json`、新增 Claim 和关联 Evidence |
+| 失败条件 | 新增无依据事实；超规则；与策略不一致；使用 unsupported claim；混合多个策略 |
+| 自动继续 | 事实和规则检查通过后继续；事实问题不能靠自动润色绕过 |
+
+### IMAGE_PLAN
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | Product DNA、选定 Strategy、Content Draft、原图清单、图片规则 |
+| 输出 | `image-plan.json`，不产生图片文件 |
+| 失败条件 | 引用不存在图片；要求虚构包装/配件/Logo/评价/授权；删除版权标识；职责重复无价值；与策略冲突 |
+| 自动继续 | 检查通过后进入 VALIDATION |
+
+### VALIDATION
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 当前 Revision 全部 JSON、Schema、规则和 Evidence |
+| 输出 | `validation-report.json`，含 error/warning/info 和修复目标节点 |
+| 失败条件 | 无法读取快照；Schema 缺失；来源哈希不一致 |
+| 自动继续 | 无论 PASS 或业务 blocking error 都进入 HUMAN_REVIEW；blocking error 时不可批准 |
+
+VALIDATION 是确定性节点，至少校验 Schema、ID 引用、来源哈希、Claim-Evidence 覆盖、unsupported claim、字段限制、跨层一致性和人工审核门。
+
+### HUMAN_REVIEW
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 原商品、DNA、评分、策略、内容、图片方案和 Validation 报告 |
+| 输出 | `review-decision.json`：APPROVE、REJECT 或 REQUEST_REVISION |
+| 失败条件 | 决定缺失；批准仍有 blocking error；强制确认项未完成 |
+| 自动继续 | 否，永远不自动批准 |
+
+人工编辑标题或描述也必须新建 Revision，并记录修改者和修改字段。
+
+### APPROVED
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 无 blocking error 的已批准 Revision |
+| 输出 | `version_NNN/version.json` 和 `pending-listing-package.json` |
+| 失败条件 | Version ID 冲突；快照不完整；来源已 STALE |
+| 自动继续 | 否；V1 到此结束，不自动发布 |
+
+### REJECTED
+
+| 项目 | 定义 |
+|---|---|
+| 输入 | 人工拒绝决定 |
+| 输出 | 拒绝原因、Bad Case 标签、被拒 Revision 引用 |
+| 失败条件 | 拒绝原因为空或 Revision 不存在 |
+| 自动继续 | 否；可手动创建新 Revision |
+
+## 4.3 自动继续矩阵
+
+| 状态 | 默认自动继续 | 阻止条件 |
+|---|---:|---|
+| START | 是 | 无法创建 Job |
+| INPUT_CHECK | 是 | INVALID、路径/哈希/解析错误 |
+| PRODUCT_ANALYSIS | 是 | Schema 或事实证据失败 |
+| PRODUCT_SCORING | 条件式 | DROP、低置信度、阻断风险、PARTIAL |
+| REMAKE_STRATEGY | 条件式 | 无有效策略、低置信度、需人工选择 |
+| CONTENT_GENERATION | 是 | 事实或规则错误 |
+| IMAGE_PLAN | 是 | 虚构、权利或引用错误 |
+| VALIDATION | 是，进入审核 | 不允许跳过审核；blocking error 只能查看/退回 |
+| HUMAN_REVIEW | 否 | 必须人工决定 |
+| APPROVED / REJECTED | 否 | 终态 |
+
+---
+
+# 第五部分：AI 节点通用契约
+
+## 5.1 通用输入信封
+
+```json
+{
+  "contract_version": "1.0",
+  "node": {
+    "name": "PRODUCT_ANALYST",
+    "node_version": "1.0",
+    "prompt_version": "product-analyst.v1",
+    "output_schema_id": "product-dna-analysis.v1"
+  },
+  "execution": {
+    "job_id": "job_20260915_001",
+    "revision_id": "revision_001",
+    "source_product_id": "1063279814277",
+    "source_manifest_sha256": "64位哈希",
+    "attempt": 1
+  },
+  "input_refs": [],
+  "policies": {
+    "fact_policy_version": "fact-policy.v1",
+    "risk_policy_version": "risk-policy.v1",
+    "platform_rule_version": "xianyu-rules.v1"
+  }
+}
+```
+
+## 5.2 通用输出信封
+
+```json
+{
+  "contract_version": "1.0",
+  "node": {
+    "name": "PRODUCT_ANALYST",
+    "node_version": "1.0",
+    "prompt_version": "product-analyst.v1",
+    "model_id": "运行时实际模型ID"
+  },
+  "execution": {
+    "job_id": "job_20260915_001",
+    "revision_id": "revision_001",
+    "source_manifest_sha256": "64位哈希",
+    "attempt": 1,
+    "started_at": "2026-09-15T03:00:00Z",
+    "finished_at": "2026-09-15T03:00:05Z"
+  },
+  "status": "SUCCESS",
+  "output": {},
+  "warnings": [],
+  "errors": []
+}
+```
+
+节点状态：`SUCCESS`、`NEEDS_HUMAN_INPUT`、`REJECTED_INPUT`、`FAILED_RETRYABLE`、`FAILED_BLOCKED`。
+
+## 5.3 AI 节点共同禁止事项
+
+1. 不得修改 Source Product；
+2. 不得读写契约未声明文件；
+3. 不得调用浏览器、发布、账号或支付工具；
+4. 不得自行增加 Workflow 节点或循环；
+5. 不得把未知字段补成看似合理的事实；
+6. 不得将模型自身知识当成当前商品证据；
+7. 不得使用未登记 Evidence ID；
+8. 不得批准 Revision 或创建 Version；
+9. 输出必须是单个 JSON 对象，不混入 Markdown；
+10. 重试只能修复格式或临时错误，不能绕过事实和风险检查。
+
+---
+
+# 第六部分：五个 AI 节点契约
+
+## 6.1 Product Analyst
+
+**职责：**理解商品，形成不带价值评分的 Product DNA 分析部分。
+
+### 输入 JSON
+
+```json
+{
+  "normalized_product": {
+    "source_product_id": "1063279814277",
+    "source_url": "https://www.goofish.com/item?id=1063279814277",
+    "source_title": "原始标题",
+    "source_description": "原始描述",
+    "source_price": null,
+    "source_images": [
+      { "image_id": "image_001", "relative_path": "图片/01.webp", "sha256": "64位哈希", "width": 1440, "height": 1920 }
+    ],
+    "source_quality": { "status": "COMPLETE", "text_expanded": true, "image_set_complete": true },
+    "human_facts": []
+  },
+  "existing_evidence": []
+}
+```
+
+### 输出 JSON
+
+```json
+{
+  "analysis_id": "analysis_001",
+  "product_type": "PHYSICAL",
+  "product_category": {},
+  "target_customer": [],
+  "customer_problem": [],
+  "purchase_motivation": [],
+  "usage_scenario": [],
+  "core_content": [],
+  "core_benefits": [],
+  "selling_points": [],
+  "keywords": [],
+  "delivery_type": "PHYSICAL_SHIPPING",
+  "risk_flags": [],
+  "unsupported_claims": [],
+  "missing_information": [],
+  "claims": [],
+  "evidence": [],
+  "analysis_confidence": 0.82,
+  "need_human_review": false
+}
+```
+
+约束：不输出评分和动作；每项核心内容、收益和卖点必须带 Evidence；推断不能伪装成原文；文图冲突必须创建 FACT_CONFLICT；无法确定交付物时返回 NEEDS_HUMAN_INPUT。
+
+## 6.2 Product Scorer
+
+**职责：**使用 Analyst 已提取事实和风险，判断是否值得重制。
+
+### 输入 JSON
+
+```json
+{
+  "product_analysis_ref": "product-dna-analysis.json",
+  "scoring_policy": {
+    "score_scale": "0-100",
+    "competition_score_direction": "HIGHER_IS_MORE_COMPETITIVE",
+    "minimum_auto_continue_confidence": 0.6,
+    "critical_risk_blocks": true
+  },
+  "available_evidence_ids": ["evidence_001", "evidence_002"]
+}
+```
+
+### 输出 JSON
+
+```json
+{
+  "scorecard_id": "scorecard_001",
+  "market_demand_score": 72,
+  "competition_score": 68,
+  "differentiation_score": 55,
+  "virtual_product_fit_score": null,
+  "score_confidence": 0.71,
+  "score_basis": [
+    {
+      "score_name": "MARKET_DEMAND",
+      "score": 72,
+      "reason": "需求和场景表达较清晰，但没有真实市场数据。",
+      "evidence_ids": ["evidence_001"],
+      "limitations": ["未联网核验搜索量和成交量"]
+    }
+  ],
+  "recommended_action": "REMAKE",
+  "recommended_action_reason": "商品可理解，但当前表达缺乏明确人群和场景。",
+  "blocking_risk_ids": [],
+  "need_human_review": false
+}
+```
+
+约束：不重新生成核心内容；不合成伪科学总分；逐项解释；competition_score 越高竞争越强；高风险降低自动继续权限；信息可能补齐时优先 NEEDS_HUMAN_INPUT，而非武断 DROP。
+
+## 6.3 Strategy Generator
+
+**职责：**生成一个到三个实质不同且有事实支持的定位策略。
+
+### 输入 JSON
+
+```json
+{
+  "product_dna_ref": "product-dna.json",
+  "strategy_request": {
+    "max_strategies": 3,
+    "allow_keep_optimize": true,
+    "allow_remake": true,
+    "price_change_requires_human": true
+  },
+  "available_evidence_ids": ["evidence_001", "evidence_002"]
+}
+```
+
+### 输出 JSON
+
+```json
+{
+  "strategy_set_id": "strategy_set_001",
+  "recommended_action": "REMAKE",
+  "strategies": [
+    {
+      "strategy_id": "strategy_001",
+      "strategy_index": 1,
+      "strategy_mode": "REMAKE",
+      "positioning": "面向入门用户的低门槛 AI 提示词资料包",
+      "target_customer": {
+        "segment": "刚开始使用 AI 的普通用户",
+        "primary_need": "快速获得可参考的提示词结构",
+        "excluded_segments": ["需要企业定制服务的团队"]
+      },
+      "main_selling_angle": "降低新手从零编写提示词的门槛",
+      "rationale": {
+        "why_this_positioning": "原始内容以提示词集合为核心，可从入门效率切入。",
+        "why_this_customer": "现有素材不足以支持企业级专业承诺。",
+        "why_it_can_win": "避免泛称大全，强调明确人群和场景。",
+        "evidence_ids": ["evidence_001"]
+      },
+      "title_direction": {},
+      "content_direction": {},
+      "image_direction": {},
+      "price_strategy": {},
+      "confidence_score": 0.78,
+      "evidence_ids": ["evidence_001"],
+      "assumptions": [],
+      "risk_controls": []
+    }
+  ],
+  "proposed_strategy_id": "strategy_001"
+}
+```
+
+约束：最多三个；KEEP 只有一个；DROP 返回空数组；策略必须实质不同；不能扩大交付物；无证据的“专业、官方、永久、全套、最新”等进入避免项；AI 不负责最终批准。
+
+## 6.4 Content Generator
+
+**职责：**只针对一个选定策略生成标题、详情、卖点、关键词和封面文案。
+
+### 输入 JSON
+
+```json
+{
+  "product_dna_ref": "product-dna.json",
+  "selected_strategy_ref": "strategy-set.json#/strategies/0",
+  "content_rules": {
+    "title_candidate_count": 3,
+    "title_max_length": 30,
+    "description_max_length": 5000,
+    "selling_point_max_count": 6,
+    "cover_text_max_lines": 3,
+    "platform_rules_need_recheck_before_publish": true
+  },
+  "unsupported_claims": [],
+  "available_evidence_ids": []
+}
+```
+
+### 输出 JSON
+
+```json
+{
+  "content_draft_id": "content_draft_001",
+  "strategy_id": "strategy_001",
+  "title_candidates": [
+    { "candidate_id": "title_001", "text": "标题候选", "character_count": 4, "claim_ids": ["claim_101"] }
+  ],
+  "proposed_title_id": "title_001",
+  "description": {
+    "text": "完整详情描述",
+    "sections": [
+      { "section_type": "WHAT_IT_IS", "text": "...", "claim_ids": [] },
+      { "section_type": "WHO_IT_IS_FOR", "text": "...", "claim_ids": [] },
+      { "section_type": "WHAT_IS_INCLUDED", "text": "...", "claim_ids": [] },
+      { "section_type": "DELIVERY_AND_NOTES", "text": "...", "claim_ids": [] }
+    ]
+  },
+  "selling_points": [{ "text": "卖点", "claim_ids": ["claim_102"] }],
+  "keywords": ["关键词"],
+  "cover_copy": { "headline": "封面主文案", "subheadline": "封面副文案", "badges": [] },
+  "claims": [],
+  "evidence_links": [],
+  "warnings": []
+}
+```
+
+约束：只能使用 DNA 和一个策略；具体数量、规格、品牌、型号、成色、交付、授权、时效和效果都要建立 Claim；没有 Evidence 的事实 Claim 必须 UNSUPPORTED；人群用“适合”表达，不能伪造购买统计；平台限制是版本化配置。
+
+## 6.5 Image Planner
+
+**职责：**输出图片制作方案，不生成、编辑或删除图片。
+
+### 输入 JSON
+
+```json
+{
+  "product_dna_ref": "product-dna.json",
+  "selected_strategy_ref": "strategy-set.json#/strategies/0",
+  "content_draft_ref": "content-draft.json",
+  "source_assets": [
+    { "image_id": "image_001", "relative_path": "图片/01.webp", "sha256": "64位哈希", "role_hint": "COVER" }
+  ],
+  "image_rules": {
+    "max_planned_images": 9,
+    "allowed_treatments": ["KEEP", "CLEAN_ONLY", "OPTIMIZE", "REBUILD"],
+    "copyright_mark_removal_allowed": false
+  }
+}
+```
+
+### 输出 JSON
+
+```json
+{
+  "image_plan_id": "image_plan_001",
+  "strategy_id": "strategy_001",
+  "global_visual_direction": {
+    "theme": "真实、清晰、非官方模板感",
+    "visual_priority": ["商品是什么", "核心卖点", "交付内容"],
+    "consistency_anchor": ["同一商品主体", "统一配色", "统一文字层级"],
+    "forbidden_visuals": ["虚构包装", "虚构配件", "伪造官方Logo", "伪造销量评价"]
+  },
+  "cover_plan": {
+    "goal": "首图一眼说明卖什么和核心购买理由",
+    "source_image_ids": ["image_001"],
+    "treatment": "OPTIMIZE",
+    "headline_claim_ids": ["claim_101"],
+    "composition": "主体居中，右侧保留少量文案空间",
+    "must_show": ["真实商品主体"],
+    "must_not_show": []
+  },
+  "detail_plans": [
+    {
+      "plan_id": "image_task_002",
+      "sequence": 2,
+      "role": "CORE_CONTENT",
+      "goal": "说明实际包含内容",
+      "source_image_ids": ["image_002"],
+      "treatment": "KEEP",
+      "claim_ids": [],
+      "composition": "保留原始内容细节",
+      "manual_notes": []
+    }
+  ],
+  "identity_and_rights_review": {
+    "possible_seller_identity": [],
+    "possible_copyright_marks": [],
+    "requires_human_review": false
+  },
+  "warnings": []
+}
+```
+
+约束：首图只设一个主要目标；详情图职责独立；不要求全图重做；CLEAN_ONLY 只能建议清理普通卖家身份，版权/作者标识必须人工审核；REBUILD 必须说明实际价值；不虚构主体、包装、附件、评价或授权。
+
+---
+
+# 第七部分：Job、Revision、Version 版本系统
+
+## 7.1 关系模型
+
+```text
+SourceProduct（只读）
+  └─ SourceManifest 001
+       ├─ RemakeJob 001
+       │    ├─ StrategySet（最多3个候选）
+       │    ├─ Revision 001（策略A，AI初稿）
+       │    ├─ Revision 002（策略A，人工修改）
+       │    │    └─ ProductVersion 001（批准）
+       │    └─ Revision 003（策略B，另一分支）
+       │         └─ ProductVersion 002（若以后批准）
+       └─ RemakeJob 002（另一次重制目标）
+
+SourceManifest 002（原始归档变化）
+  └─ 新 Job；旧结果保留，但标记来源已更新
+```
+
+关系规则：一个 SourceProduct 可有多个 Manifest；一个 Manifest 可有多个 Job；一个 Job 可有多个 Revision 和最多三个策略候选；一个 Revision 只绑定一个选定策略；只有 APPROVED Revision 可晋升 Version；发布模块未来只能消费 Version。
+
+## 7.2 Job 数据结构
+
+```json
+{
+  "schema_version": "1.0",
+  "job_id": "job_20260915_001",
+  "source_product_id": "source_product_001",
+  "source_manifest_sha256": "64位哈希",
+  "intent": "FULL_REMAKE",
+  "status": "HUMAN_REVIEW",
+  "current_revision_id": "revision_003",
+  "strategy_set_revision_id": "revision_001",
+  "created_at": "2026-09-15T03:00:00Z",
+  "updated_at": "2026-09-15T03:10:00Z",
+  "created_by": "local_user",
+  "idempotency_key": "source_product_001:哈希:FULL_REMAKE",
+  "events": [
+    { "event_id": "event_001", "type": "JOB_CREATED", "at": "2026-09-15T03:00:00Z", "revision_id": "revision_001" }
+  ]
+}
+```
+
+job.json 允许更新当前状态，但 events 只能追加；节点输出仍保存在不可变 Revision。
+
+## 7.3 Revision 数据结构
+
+```json
+{
+  "schema_version": "1.0",
+  "revision_id": "revision_003",
+  "job_id": "job_20260915_001",
+  "revision_number": 3,
+  "parent_revision_id": "revision_002",
+  "branch_reason": "HUMAN_REQUESTED_CONTENT_REVISION",
+  "selected_strategy_id": "strategy_001",
+  "source_manifest_sha256": "64位哈希",
+  "status": "NEEDS_REVIEW",
+  "started_from_node": "CONTENT_GENERATION",
+  "artifacts": {
+    "product_dna": "../../shared/product-dna.revision_001.json",
+    "strategy_set": "../../shared/strategy-set.revision_001.json",
+    "content_draft": "content-draft.json",
+    "image_plan": "image-plan.json",
+    "validation_report": "validation-report.json"
+  },
+  "change_summary": ["根据人工意见调整标题方向"],
+  "created_at": "2026-09-15T03:08:00Z",
+  "created_by": "AI_WORKFLOW"
+}
+```
+
+Revision 目录写完并生成 manifest 后封存；任何修改都新建下一 Revision；编号单调递增；复用上游产物要引用不可变文件及哈希。
+
+## 7.4 Version 数据结构
+
+```json
+{
+  "schema_version": "1.0",
+  "version_id": "version_001",
+  "version_number": 1,
+  "source_product_id": "source_product_001",
+  "source_manifest_sha256": "64位哈希",
+  "job_id": "job_20260915_001",
+  "approved_revision_id": "revision_003",
+  "selected_strategy_id": "strategy_001",
+  "status": "READY_FOR_EXPORT",
+  "title": "人工批准的新标题",
+  "description": "人工批准的新描述",
+  "selling_points": [],
+  "keywords": [],
+  "cover_copy": {},
+  "image_plan_ref": "image-plan.json",
+  "validation_report_ref": "validation-report.json",
+  "review_decision_ref": "review-decision.json",
+  "approved_at": "2026-09-15T03:15:00Z",
+  "approved_by": "local_user",
+  "publish_status": "NOT_PUBLISHED"
+}
+```
+
+Version 必须指向 APPROVED Revision；不可覆盖；publish_status 在 V1 固定为 NOT_PUBLISHED；“最新”只用索引指针表示。
+
+## 7.5 修改影响范围
+
+| 变化 | 失效或重跑范围 |
+|---|---|
+| 原标题、描述、图片或采集状态变化 | DNA、评分、策略、内容、图片方案、Validation 全部 STALE |
+| 人工补充商品事实 | DNA 以后所有节点重跑 |
+| 只调整评分规则 | Scoring 及下游重跑 |
+| 选择另一个策略 | 新 Revision；Content、Image Plan、Validation 重跑 |
+| 修改标题/描述 | 新 Revision；Content 和下游重跑，DNA/Strategy 可复用 |
+| 修改图片方案 | 新 Revision；Image Plan 和 Validation 重跑 |
+| 平台限制变化 | Validation 重跑，必要时 Content/Image Plan 重跑 |
+| 人工批准 | 当前 Revision 晋升 Version，不重跑 |
+
+
+## 7.1 三层对象关系
+
+```text
+SourceProduct（只读原始归档）
+  1 ── N RemakeJob（一次重制任务）
+           1 ── N RemakeRevision（不可变草稿快照）
+                    0 ── 1 ProductVersion（人工批准后的正式快照）
+```
+
+- **RemakeJob**：记录一次重制目标、运行状态和所用规则版本；同一原商品可以有多个 Job。
+- **RemakeRevision**：某次分析、策略选择、内容生成、图片方案或人工修订后的完整不可变快照。任何 AI 重跑或人工修改都新建 Revision，不覆盖旧结果。
+- **ProductVersion**：由某个已通过人工审核的 Revision 固化而来，是“待发布商品”的正式版本；V1 不代表已发布。
+
+## 7.2 Job 数据模型
+
+| 字段 | 类型 | 必填 | 含义 |
+|---|---|---:|---|
+| `job_id` | string | 是 | 全局唯一任务 ID |
+| `source_product_id` | string | 是 | 只读原商品 ID |
+| `source_manifest_ref` | string | 是 | 输入清单相对路径 |
+| `source_snapshot_hash` | string | 是 | 原始素材清单哈希，用于检测源变化，不复制改写原文件 |
+| `status` | enum | 是 | Workflow 当前状态 |
+| `created_at` / `updated_at` | date-time | 是 | 任务时间 |
+| `policy_versions` | object | 是 | 评分、内容、图片、校验规则版本 |
+| `active_revision_id` | string/null | 是 | 当前草稿 Revision |
+| `approved_version_ids` | string[] | 是 | 已批准版本列表 |
+| `last_error` | object/null | 否 | 最近一次失败摘要 |
+
+## 7.3 Revision 数据模型
+
+| 字段 | 类型 | 必填 | 含义 |
+|---|---|---:|---|
+| `revision_id` | string | 是 | 如 `revision_001` |
+| `job_id` | string | 是 | 所属 Job |
+| `revision_number` | integer | 是 | Job 内单调递增 |
+| `parent_revision_id` | string/null | 是 | 来源快照；首版为 null |
+| `created_by` | enum | 是 | `AI_WORKFLOW` / `HUMAN` / `SYSTEM` |
+| `change_reason` | string | 是 | 为什么产生新快照 |
+| `selected_strategy_id` | string/null | 是 | 当前选定策略 |
+| `artifact_refs` | object | 是 | DNA、评分、策略、内容、图片方案、校验、证据文件引用 |
+| `artifact_hashes` | object | 是 | 每项 AI 输出的 SHA-256 |
+| `review_status` | enum | 是 | `DRAFT` / `CHANGES_REQUESTED` / `APPROVED` / `REJECTED` |
+| `created_at` | date-time | 是 | 创建时间 |
+
+## 7.4 Version 数据模型
+
+| 字段 | 类型 | 必填 | 含义 |
+|---|---|---:|---|
+| `version_id` | string | 是 | 如 `version_001` |
+| `job_id` | string | 是 | 所属 Job |
+| `source_revision_id` | string | 是 | 唯一来源 Revision |
+| `version_number` | integer | 是 | Job 内单调递增 |
+| `approval` | object | 是 | 审核人、时间、结论、备注 |
+| `listing_package_ref` | string | 是 | 待发布包 manifest |
+| `evidence_coverage` | object | 是 | 事实声明覆盖统计 |
+| `created_at` | date-time | 是 | 固化时间 |
+| `publish_status` | enum | 是 | V1 固定为 `NOT_PUBLISHED`，后续可扩展 |
+
+## 7.5 不变量
+
+1. SourceProduct 目录只读；运行产物必须写入独立输出目录。
+2. Revision 创建后不可修改；修订只能产生下一 Revision。
+3. Version 只能来源于 `APPROVED` Revision，且不能反向修改 Revision。
+4. 同一 Revision 可被拒绝后保留，但不得成为 Version。
+5. 所有 AI 产物记录节点名、模型标识、Prompt 版本、Schema 版本、输入哈希和输出哈希。
+6. 删除当前草稿不等于删除历史；V1 默认不提供物理删除，只允许标记废弃。
+
+---
+
+# 第八部分：Evidence 证据链设计
+
+## 8.1 设计目标
+
+证据链不是给整篇文案挂一个“来源”，而是把可验证的**事实声明 Claim**逐条关联到一个或多个 Evidence。情绪性表达和策略性定位可以不建立事实证据，但不得伪装成商品事实。
+
+## 8.2 Claim 数据结构
+
+```json
+{
+  "claim_id": "claim_101",
+  "claim": "资料包包含5000条提示词",
+  "claim_type": "QUANTITY",
+  "claim_scope": "CONTENT_DRAFT",
+  "artifact_ref": "content-draft.json#/selling_points/0",
+  "status": "SUPPORTED",
+  "evidence_ids": ["evidence_201"],
+  "requires_human_confirmation": false,
+  "created_by_node": "CONTENT_GENERATOR",
+  "created_at": "2026-09-15T10:00:00+08:00"
+}
+```
+
+`claim_type` 建议枚举：`IDENTITY`、`QUANTITY`、`SPECIFICATION`、`BRAND_MODEL`、`CONDITION`、`DELIVERY`、`AUTHORIZATION`、`TIMELINESS`、`PERFORMANCE`、`BENEFIT`、`AUDIENCE_FIT`、`OTHER`。
+
+`status`：
+
+- `SUPPORTED`：至少一条有效支持证据；
+- `PARTIALLY_SUPPORTED`：只有间接证据或证据不足以覆盖完整表述；
+- `UNSUPPORTED`：没有支持证据；
+- `CONTRADICTED`：存在直接冲突；
+- `HUMAN_CONFIRMED`：由人工明确确认，并保留确认记录。
+
+## 8.3 Evidence JSON Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.xianyu-ai/schemas/evidence.schema.json",
+  "title": "EvidenceSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_product_id", "claims", "evidence", "generated_at"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "source_product_id": { "type": "string", "minLength": 1 },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id", "claim", "claim_type", "claim_scope", "artifact_ref", "status", "evidence_ids", "requires_human_confirmation"],
+        "properties": {
+          "claim_id": { "type": "string", "minLength": 1 },
+          "claim": { "type": "string", "minLength": 1 },
+          "claim_type": { "type": "string", "enum": ["IDENTITY", "QUANTITY", "SPECIFICATION", "BRAND_MODEL", "CONDITION", "DELIVERY", "AUTHORIZATION", "TIMELINESS", "PERFORMANCE", "BENEFIT", "AUDIENCE_FIT", "OTHER"] },
+          "claim_scope": { "type": "string", "enum": ["PRODUCT_DNA", "STRATEGY", "CONTENT_DRAFT", "IMAGE_PLAN", "HUMAN_EDIT"] },
+          "artifact_ref": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "HUMAN_CONFIRMED"] },
+          "evidence_ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "requires_human_confirmation": { "type": "boolean" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_id", "claim_id", "relation", "source_type", "source_reference", "excerpt", "confidence", "created_by", "created_at"],
+        "properties": {
+          "evidence_id": { "type": "string", "minLength": 1 },
+          "claim_id": { "type": "string", "minLength": 1 },
+          "relation": { "type": "string", "enum": ["DIRECT", "INDIRECT", "CONTRADICTS"] },
+          "source_type": { "type": "string", "enum": ["SOURCE_TITLE", "SOURCE_DESCRIPTION", "SOURCE_JSON_FIELD", "SOURCE_IMAGE", "SOURCE_FILE", "HUMAN_CONFIRMATION"] },
+          "source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["relative_path"],
+            "properties": {
+              "relative_path": { "type": "string", "minLength": 1 },
+              "json_pointer": { "type": ["string", "null"] },
+              "image_id": { "type": ["string", "null"] },
+              "region": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["x", "y", "width", "height"],
+                    "properties": {
+                      "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                      "y": { "type": "number", "minimum": 0, "maximum": 1 },
+                      "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                      "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+                    }
+                  }
+                ]
+              },
+              "content_hash": { "type": ["string", "null"] },
+              "human_actor": { "type": ["string", "null"] },
+              "confirmed_at": { "type": ["string", "null"], "format": "date-time" }
+            }
+          },
+          "excerpt": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "created_by": { "type": "string", "enum": ["AI", "HUMAN", "SYSTEM"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+## 8.4 证据判定规则
+
+1. `DIRECT`：来源明确出现同一事实；例如 JSON 数量字段或图片中清晰可读的规格。
+2. `INDIRECT`：来源只能支持较弱推断；不能据此升级成更强的绝对表述。
+3. `CONTRADICTS`：文案、JSON、图片之间冲突；Claim 状态必须为 `CONTRADICTED` 并阻止自动批准。
+4. `HUMAN_CONFIRMATION`：必须记录确认人、确认时间、确认内容，不允许用系统默认值模拟人工确认。
+5. 来源引用必须使用相对路径、JSON Pointer、图片 ID/区域和内容哈希；不能只写“来自原商品”。
+6. 标题、详情、卖点和封面文案中的所有具体事实 Claim，批准时证据覆盖率必须为 **100%**。
+7. `PARTIALLY_SUPPORTED`、`UNSUPPORTED`、`CONTRADICTED` 事实 Claim 均不能进入正式 Version；要么删改，要么人工补证。
+8. Validation 同时输出：事实 Claim 总数、已支持数、人工确认数、未支持数、冲突数和覆盖率。
+
+---
+
+# 第九部分：文件目录设计
+
+## 9.1 代码目录
+
+在现有 Node.js 主工程内新增隔离目录，建议位于：
+
+```text
+downloader/
+└── ai-remake/
+    ├── README.md
+    ├── schemas/                 # Product DNA、Strategy、Evidence、Job、Revision、Version 等 JSON Schema
+    ├── contracts/               # 五个 AI 节点的输入/输出契约与通用信封
+    ├── workflows/               # V1 状态定义、迁移表、节点编排说明
+    ├── policies/                # 评分、动作、事实声明、图片处理、人工审核规则
+    ├── prompts/                 # 按节点和版本保存的提示词，不混入业务代码
+    ├── adapters/                # 只读适配现有商品归档；未来模型供应商适配
+    ├── analyzers/               # Product Analyst、Product Scorer 的职责边界
+    ├── generators/              # Strategy、Content、Image Plan 生成职责
+    ├── validators/              # Schema、证据覆盖、禁用词、跨产物一致性校验
+    ├── workflow-runtime/        # 状态推进、重试、断点恢复；不承担采集和发布
+    ├── store/                   # 文件/JSON 存取约定、原子写入、哈希和锁策略
+    └── tests/
+        ├── fixtures/            # 脱敏商品样本或路径清单
+        ├── contract/            # 节点契约测试
+        ├── workflow/            # 状态迁移测试
+        └── validation/          # 证据、风险、Bad Case 测试
+```
+
+职责边界：
+
+- `adapters/` 读取现有归档但不得改写；采集系统不反向依赖 `ai-remake/`。
+- `workflow-runtime/` 只执行固定图，不允许模型自由选择下一节点或调用任意工具。
+- `prompts/`、`schemas/`、`policies/` 均带版本号；一次 Job 固定引用版本，避免重跑漂移。
+- `store/` 使用临时文件 + 原子重命名保存 JSON；写入失败不得留下“半个 Revision”。
+- V1 不增加数据库；索引由小型 manifest JSON 维护，规模增长后再评估迁移。
+
+## 9.2 独立运行数据目录
+
+不得写入 `商品ID/` 原始归档。建议在项目可配置的数据根目录创建：
+
+```text
+商品重制输出/
+└── source_product_001/
+    ├── source-manifest.json             # 原素材路径、尺寸、哈希，只引用不复制改写
+    ├── jobs/
+    │   └── job_001.json
+    ├── revisions/
+    │   ├── revision_001/
+    │   │   ├── revision.json
+    │   │   ├── product-dna-analysis.json
+    │   │   ├── product-scorecard.json
+    │   │   ├── product-dna.json
+    │   │   ├── strategy-set.json
+    │   │   ├── content-draft.json
+    │   │   ├── image-plan.json
+    │   │   ├── claims-evidence.json
+    │   │   └── validation-report.json
+    │   └── revision_002/
+    │       └── ...
+    ├── versions/
+    │   └── version_001/
+    │       ├── version.json
+    │       ├── product-dna.json
+    │       ├── selected-strategy.json
+    │       ├── listing-content.json
+    │       ├── image-plan.json
+    │       ├── claims-evidence.json
+    │       └── pending-listing-manifest.json
+    └── index.json                       # Job、Revision、Version 轻量索引
+```
+
+V1 的 `pending-listing-manifest.json` 只声明待发布内容和拟使用原图/未来制图任务，不伪造“图片已完成”或“商品已发布”。
+
+---
+
+# 第十部分：V1 开发顺序
+
+| 阶段 | 优先级 | 交付物 | 通过标准 |
+|---|---|---|---|
+| P0 契约冻结 | 必须 | 领域词汇、Schema、枚举、字段来源、状态迁移表 | 样例 JSON 可通过 Schema；无同名异义字段 |
+| P1 只读输入适配 | 必须 | SourceManifest 生成规则、素材哈希、完整性检查 | 对现有归档零写入；缺失和 `PARTIAL/待核对` 可识别 |
+| P2 文件存储与版本骨架 | 必须 | Job/Revision/Version manifest、原子写入、恢复规则 | 中断不产生半成品；重跑不覆盖旧 Revision |
+| P3 Analyst + Scorer | 必须 | Product DNA 分阶段产物和评分依据 | 不生成销售文案；评分明确局限；事实有 Evidence |
+| P4 Strategy + Content + Image Plan | 必须 | 最多三个策略、单策略内容草稿、图片方案 | 不扩大商品事实；图片节点不生成图片 |
+| P5 Validation + Human Review | 必须 | Schema/证据/一致性/风险报告和审核动作 | 事实 Claim 证据覆盖率 100%；不能自动批准 |
+| P6 Electron 最小入口 | 后置 | 从归档启动 Job、查看策略/证据、选择、批准/退回 | 不改采集逻辑；完整跑通一个样本到 Version |
+
+不在 V1：联网市场研究、自由 Agent、最终图片生成、自动发布、跨平台规则中心、数据库、自动定价执行。
+
+---
+
+# 第十一部分：10 个真实商品验证方案
+
+## 11.1 样本选择
+
+从真实采集归档中选择 10 个，不只挑“容易成功”的商品：
+
+| 编号 | 样本类型 | 主要验证点 |
+|---:|---|---|
+| 1 | 信息完整的实体标准品 | 品牌/型号/规格提取，事实不漂移 |
+| 2 | 信息不完整的实体商品 | `missing_information` 与人工门禁 |
+| 3 | 多图且文图一致的商品 | 多图证据合并与首图职责 |
+| 4 | 文图冲突商品 | `CONTRADICTED` Claim 阻断 |
+| 5 | 有普通卖家身份痕迹的图片 | CLEAN_ONLY 建议是否克制 |
+| 6 | 有版权/作者标识的数字资料 | 权利风险，不自动建议移除 |
+| 7 | 虚拟资料包且数量明确 | 数量、交付方式证据链 |
+| 8 | 虚拟资料包且授权不明确 | 授权声明不得生成，强制审核 |
+| 9 | 原标题夸张或含效果承诺 | unsupported claim 清理 |
+| 10 | 应 DROP 或暂缓的高风险/低信息商品 | 系统能停止生成而非硬包装 |
+
+如果现有归档缺少某类，应标记覆盖缺口，不能用伪造样本代替“真实商品验证”；可另建合成 fixture 做契约测试，但必须与真实验证分开报告。
+
+## 11.2 每个样本执行步骤
+
+1. 记录 SourceManifest、文件哈希、采集完整性，不修改原目录。
+2. 首次完整运行到 HUMAN_REVIEW；保存所有节点输入输出和耗时。
+3. 由人工逐项审核 Product DNA：商品类型、核心内容、交付、缺失、风险。
+4. 审核四项评分的依据和局限，检查是否把主观启发式说成市场事实。
+5. 检查动作：KEEP/REMAKE/DROP 是否合理；REMAKE 策略是否真正不同且不超过三个。
+6. 选一个策略生成内容和图片方案，逐条核对 Claim 与 Evidence。
+7. 对需要修订的样本产生新 Revision，确认旧 Revision 保留。
+8. 只批准符合门槛的 Revision，生成 Version；其余退回或拒绝。
+9. 从同一输入重跑一次，比较结构完整性、事实一致性和策略波动。
+10. 汇总人工评分和 Bad Case，不以“JSON 已生成”作为成功。
+
+## 11.3 验收指标
+
+| 指标 | V1 门槛 |
+|---|---:|
+| JSON Schema 合法率 | 100% |
+| 原始归档零写入率 | 100% |
+| 事实 Claim 证据覆盖率（批准版本） | 100% |
+| 无依据新增具体事实 | 0 条 |
+| 文图冲突检出率 | 目标 100%，逐例人工核验 |
+| `PARTIAL/待核对` 强制人工审核率 | 100% |
+| DROP 商品继续生成营销内容 | 0 个 |
+| 策略数量违规 | 0 个 |
+| Revision 重跑覆盖历史 | 0 次 |
+| 人工判断 Product DNA 基本正确 | 至少 8/10 |
+| 人工判断选中策略可用 | 至少 7/10；不达标则停在策略优化，不进入图片生成开发 |
+
+“Product DNA 基本正确”和“策略可用”须由人工按固定量表判断，不由生成模型自评代替。
+
+## 11.4 人工量表
+
+每项 0–2 分：
+
+- 商品身份是否准确；
+- 核心内容/交付是否准确；
+- 目标人群和问题是否合理且不过度推断；
+- 风险和缺失是否充分；
+- 策略是否有清晰人群、角度和理由；
+- 标题/详情是否忠于事实；
+- 图片方案是否能说明商品而不虚构。
+
+单商品满分 14；建议 11 分及以上视为“可用”，但任何硬性事实错误、权利风险漏检或证据冲突均一票否决。
+
+---
+
+# 第十二部分：Bad Case 分类与处理
+
+| 类型 | 示例 | Workflow 处理 |
+|---|---|---|
+| INPUT_INCOMPLETE | 缺商品信息 JSON、零图片、文案空 | INPUT_CHECK 失败或转人工补充 |
+| INPUT_PARTIAL | 采集标记 `PARTIAL/待核对` | 可分析，但强制 HUMAN_REVIEW |
+| FACT_CONFLICT | 文案写 5000 条，图片写 3000 条 | 标记冲突，Validation 阻断 |
+| UNSUPPORTED_CLAIM | 自动写“永久更新、官方授权” | 删除/降级表述或人工补证 |
+| HALLUCINATED_ASSET | 图片方案出现原商品没有的配件 | Validation 阻断，重生成方案 |
+| STRATEGY_DUPLICATION | 三个策略只是换同义词 | Strategy 节点重试，仍失败则人工 |
+| OVER_POSITIONING | 普通资料包装成企业级服务 | 降级定位或拒绝 |
+| SCORE_FALSE_PRECISION | 把启发式评分说成真实市场数据 | Scorer 输出不合格 |
+| RIGHTS_RISK | 默认清除版权/作者标识 | 强制人工审核，不自动处理 |
+| VERSION_OVERWRITE | 重跑覆盖 revision_001 | 存储层硬失败 |
+| MODEL_OUTPUT_INVALID | JSON 不合法或字段缺失 | 节点有限重试；不推进状态 |
+| HUMAN_REJECTED | 审核认为商品不应重制 | 保存拒绝记录，结束 Job 或新建 Revision |
+
+---
+
+# 第十三部分：最终冻结决策
+
+1. V1 采用**固定 Workflow + 五个专用 AI 节点 + 人工审核**，不采用全自动 Agent。
+2. Product DNA 是所有下游产物的事实中枢；Analyst 负责理解，Scorer 负责评分和动作。
+3. Strategy Layer 必须存在；一个 REMAKE 商品生成 1–3 个实质不同策略，Content 一次只消费一个人工选定策略。
+4. 市场需求和竞争评分是本地素材启发式代理，不代表真实销量、搜索量或全网竞争。
+5. 原始归档只读；任何 AI 重跑、人工作业或规则变化都产生不可变 Revision。
+6. 人工批准后的 Revision 才可固化成 Version；Version 在 V1 只代表“待发布”，不代表已发布。
+7. 每个具体事实都建立 Claim；正式 Version 的事实 Claim 证据覆盖率必须为 100%。
+8. Image Planner 只制定 KEEP/CLEAN_ONLY/OPTIMIZE/REBUILD 方案，不生成图片；版权和作者标识必须人工处理。
+9. V1 使用 Node.js + 文件/JSON，不引入 Python、数据库或新框架。
+10. 先用 10 个真实商品验证 Product DNA 和策略质量；达不到门槛，不进入最终图片生成阶段。
+
+## 完成检查表
+
+- [x] Product DNA JSON Schema
+- [x] Product DNA 字段用途、类型、必填和来源
+- [x] ProductRemakeStrategy JSON Schema 与最多三个策略规则
+- [x] Workflow 状态机及每状态契约
+- [x] 五个 AI 节点输入输出定义
+- [x] Job / Revision / Version 关系
+- [x] Evidence 与 Claim 证据链
+- [x] 文件和 JSON 目录设计
+- [x] V1 开发顺序
+- [x] 10 个真实商品验证方案
+- [x] Bad Case 与最终冻结决策
+
+本报告完成的是产品逻辑、数据边界和节点契约冻结，不包含业务代码实现，也不修改现有采集模块。
+

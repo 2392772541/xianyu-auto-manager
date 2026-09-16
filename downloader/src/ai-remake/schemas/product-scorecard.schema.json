@@ -1,0 +1,75 @@
+{
+  "": "product-scorecard.schema.json",
+  "title": "ProductScorecard",
+  "description": "独立的商品价值评价卡，采用 1-5 分制低精度等级，与 ProductDNA 彻底解耦",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "demand_signal_strength",
+    "positioning_clarity",
+    "differentiation_potential",
+    "remake_feasibility",
+    "recommended_action",
+    "decision_reason",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "demand_signal_strength": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "positioning_clarity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "differentiation_potential": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "remake_feasibility": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "recommended_action": {
+      "": "enums.schema.json#/definitions/RecommendedAction"
+    },
+    "decision_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "limitations": {
+      "type": "string",
+      "description": "说明未联网与无全网大盘数据的代理局限性"
+    },
+    "scoring_basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text_richness": {
+          "type": "string"
+        },
+        "image_count": {
+          "type": "integer"
+        },
+        "has_concrete_facts": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "关联的证据条目 ID 列表"
+    }
+  }
+}

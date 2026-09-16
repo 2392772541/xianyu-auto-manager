@@ -1,0 +1,79 @@
+{
+  "$id": "node-execution-receipt.schema.json",
+  "title": "NodeExecutionReceipt",
+  "description": "不可变节点执行凭据，记录工作流各节点的执行参数、哈希快照、耗时及状态",
+  "type": "object",
+  "required": [
+    "receipt_id",
+    "job_id",
+    "revision_id",
+    "node",
+    "input_hash",
+    "output_hash",
+    "started_at",
+    "finished_at",
+    "status",
+    "attempt",
+    "model_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^rec_[a-zA-Z0-9_-]{8,32}$"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "revision_id": {
+      "type": "string"
+    },
+    "node": {
+      "type": "string"
+    },
+    "input_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "output_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "FAILED",
+        "SKIPPED"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "model_id": {
+      "type": "string"
+    },
+    "prompt_version": {
+      "type": ["string", "null"]
+    },
+    "policy_version": {
+      "type": ["string", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

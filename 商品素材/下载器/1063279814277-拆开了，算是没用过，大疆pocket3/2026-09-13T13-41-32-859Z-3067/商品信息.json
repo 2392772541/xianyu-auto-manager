@@ -1,0 +1,38 @@
+{
+  "id": "1063279814277",
+  "url": "https://www.goofish.com/item?id=1063279814277",
+  "description": "拆开了，算是没用过，大疆pocket3\n深圳南山白石洲附近自提\n感兴趣的话点“我想要”和我私聊吧～",
+  "title": "拆开了，算是没用过，大疆pocket3",
+  "images": [
+    {
+      "position": 1,
+      "url": "https://img.alicdn.com/bao/uploaded/i4/306220602/O1CN01h4nr8b1GJlaBvq25I_!!4611686018427383354-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/01.webp",
+      "width": 1440,
+      "height": 1920,
+      "sha256": "8b2791a49e49acb434df98f1e80da986f034fbcd5cf3160caa0a0c3f08de33cb"
+    },
+    {
+      "position": 2,
+      "url": "https://img.alicdn.com/bao/uploaded/i3/306220602/O1CN01L66WHY1GJlaBwTlOy_!!4611686018427383354-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/02.webp",
+      "width": 1440,
+      "height": 1920,
+      "sha256": "6671ca9a34b2912cfb87a1f76f1c6bf6baac61a3b05b0889965f31438e8561cd"
+    },
+    {
+      "position": 3,
+      "url": "https://img.alicdn.com/bao/uploaded/i2/306220602/O1CN01cZh3aw1GJlaDVCJly_!!4611686018427383354-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/03.webp",
+      "width": 883,
+      "height": 1920,
+      "sha256": "e5c72c7660d6c1108434d622eab76735c75ad59a1c6cd0f6c9f016372724caec"
+    }
+  ],
+  "expected": 3,
+  "expanded": true,
+  "capturedAt": "2026-09-13T13:41:33.018Z",
+  "failed": [],
+  "complete": true,
+  "uniqueImages": 3
+}

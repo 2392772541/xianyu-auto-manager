@@ -1,0 +1,50 @@
+{
+  "": "validation-report.schema.json",
+  "title": "ValidationReport",
+  "description": "确定性硬校验报告，综合风控、证据覆盖、图文冲突与履约检查",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "passed",
+    "errors",
+    "warnings",
+    "fact_coverage_rate",
+    "fulfillment_ready"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "fact_coverage_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "fulfillment_ready": {
+      "type": "boolean"
+    },
+    "rights_compliant": {
+      "type": "boolean"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

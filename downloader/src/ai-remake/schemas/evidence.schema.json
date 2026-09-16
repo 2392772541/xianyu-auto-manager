@@ -1,0 +1,129 @@
+{
+  "": "evidence.schema.json",
+  "title": "EvidenceSet",
+  "description": "AI 生成内容的来源证据链追溯集合，按 claim_nature 与 evidence_scope 双重分级",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "claims"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "claim_id",
+          "claim_text",
+          "claim_nature",
+          "evidence_scope",
+          "sources",
+          "verification_status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "pattern": "^clm_[a-zA-Z0-9_-]{4,32}$"
+          },
+          "claim_text": {
+            "type": "string"
+          },
+          "claim_nature": {
+            "": "enums.schema.json#/definitions/ClaimNature"
+          },
+          "evidence_scope": {
+            "": "enums.schema.json#/definitions/EvidenceScope"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "source_type",
+                "source_ref"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "source_type": {
+                  "type": "string",
+                  "enum": [
+                    "SOURCE_DESCRIPTION",
+                    "SOURCE_IMAGE",
+                    "SOURCE_TITLE",
+                    "HUMAN_CONFIRMATION",
+                    "SELLABLE_OFFER_ASSET"
+                  ]
+                },
+                "source_ref": {
+                  "type": "string"
+                },
+                "char_range": {
+                  "type": "object",
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "image_box": {
+                  "type": "object",
+                  "required": [
+                    "x",
+                    "y",
+                    "w",
+                    "h"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "w": {
+                      "type": "number"
+                    },
+                    "h": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "DIRECT_MATCH",
+              "INDIRECT_INFERRED",
+              "CONTRADICTED",
+              "UNVERIFIED"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  }
+}

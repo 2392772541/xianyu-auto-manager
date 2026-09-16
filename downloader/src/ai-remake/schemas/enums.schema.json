@@ -1,0 +1,137 @@
+{
+  "": "enums.schema.json",
+  "title": "EnumsDefinition",
+  "description": "闲鱼商品 AI 重制模块集中枚举定义，统一所有 Schema 的基础状态约束",
+  "definitions": {
+    "RightsStatus": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "USER_OWNED",
+        "LICENSED",
+        "PUBLIC_DOMAIN",
+        "NOT_AUTHORIZED"
+      ]
+    },
+    "FulfillmentStatus": {
+      "type": "string",
+      "enum": [
+        "NOT_CHECKED",
+        "READY",
+        "INCOMPLETE",
+        "UNAVAILABLE"
+      ]
+    },
+    "ClaimNature": {
+      "type": "string",
+      "enum": [
+        "FACT",
+        "INFERENCE",
+        "MARKETING_EXPRESSION",
+        "OPINION",
+        "COMPLIANCE_DISCLOSURE"
+      ]
+    },
+    "EvidenceScope": {
+      "type": "string",
+      "enum": [
+        "REFERENCE_SOURCE",
+        "SELLABLE_OFFER",
+        "HUMAN_CONFIRMED"
+      ]
+    },
+    "WorkflowStatus": {
+      "type": "string",
+      "enum": [
+        "START",
+        "INPUT_CHECK",
+        "PRODUCT_ANALYSIS",
+        "PRODUCT_SCORING",
+        "REMAKE_STRATEGY",
+        "STRATEGY_SELECTION",
+        "CONTENT_GENERATION",
+        "IMAGE_PLAN",
+        "VALIDATION",
+        "HUMAN_INPUT",
+        "HUMAN_REVIEW",
+        "APPROVED",
+        "REJECTED"
+      ]
+    },
+    "RecommendedAction": {
+      "type": "string",
+      "enum": [
+        "KEEP",
+        "REMAKE",
+        "DROP"
+      ]
+    },
+    "ImageAction": {
+      "type": "string",
+      "enum": [
+        "KEEP",
+        "CLEAN_ONLY",
+        "OPTIMIZE",
+        "REBUILD"
+      ]
+    },
+    "HumanReviewDecision": {
+      "type": "string",
+      "enum": [
+        "APPROVE",
+        "REJECT",
+        "REQUEST_REVISION"
+      ]
+    },
+    "DeliveryType": {
+      "type": "string",
+      "enum": [
+        "NETDISK",
+        "CARD_KEY",
+        "AUTO_SHIP",
+        "MANUAL_SERVICE",
+        "OTHER"
+      ]
+    },
+    "RiskFlag": {
+      "type": "string",
+      "enum": [
+        "COPYRIGHT_OR_LICENSE",
+        "EXAGGERATED_PROMISE",
+        "ILLEGAL_OR_PROHIBITED",
+        "PRICE_MISMATCH",
+        "PLATFORM_SENSITIVE_WORDS",
+        "IMAGE_TEXT_CONFLICT",
+        "INCOMPLETE_INFORMATION"
+      ]
+    },
+    "StrategyChangeScope": {
+      "type": "string",
+      "enum": [
+        "POSITIONING_ONLY",
+        "MESSAGING_ONLY",
+        "AUDIENCE_REFRAME",
+        "PACKAGING_REFRAME",
+        "PRODUCT_CHANGE_REQUIRED"
+      ]
+    },
+    "AssetAllowedUsage": {
+      "type": "string",
+      "enum": [
+        "DIRECT_USE",
+        "EDIT_ALLOWED",
+        "REFERENCE_ONLY",
+        "PROHIBITED"
+      ]
+    },
+    "AssetOrigin": {
+      "type": "string",
+      "enum": [
+        "SOURCE_PRODUCT",
+        "USER_UPLOADED",
+        "GENERATED_DERIVATIVE",
+        "EXTERNAL_AUTHORIZED"
+      ]
+    }
+  }
+}

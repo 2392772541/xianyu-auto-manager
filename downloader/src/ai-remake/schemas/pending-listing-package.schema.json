@@ -1,0 +1,190 @@
+{
+  "$id": "pending-listing-package.schema.json",
+  "title": "PendingListingPackage",
+  "description": "终审完成、待发布的最终商品包成品契约，包含完整合法的 SellableOffer、文案、图片方案及不可篡改快照哈希",
+  "type": "object",
+  "required": [
+    "package_id",
+    "version_id",
+    "approved_revision_id",
+    "source_product_id",
+    "offer_id",
+    "source_manifest_hash",
+    "sellable_offer_hash",
+    "selected_strategy_id",
+    "selected_strategy_hash",
+    "title",
+    "description",
+    "selling_points",
+    "keywords",
+    "cover_copy",
+    "listing_content",
+    "image_plan",
+    "evidence_summary",
+    "rights_summary",
+    "fulfillment_summary",
+    "validation_report_hash",
+    "human_review",
+    "package_hash",
+    "fulfillment_status",
+    "package_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "package_id": {
+      "type": "string",
+      "pattern": "^pkg_[a-zA-Z0-9_-]{8,32}$"
+    },
+    "version_id": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "approved_revision_id": {
+      "type": "string",
+      "pattern": "^rev_[a-zA-Z0-9_-]{8,32}$"
+    },
+    "source_product_id": {
+      "type": "string"
+    },
+    "offer_id": {
+      "type": "string"
+    },
+    "source_manifest_hash": {
+      "type": "string"
+    },
+    "sellable_offer_hash": {
+      "type": "string"
+    },
+    "selected_strategy_id": {
+      "type": "string"
+    },
+    "selected_strategy_hash": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "selling_points": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "cover_copy": {
+      "type": "object",
+      "required": ["headline"],
+      "additionalProperties": false,
+      "properties": {
+        "headline": { "type": "string" },
+        "subheadline": { "type": "string" }
+      }
+    },
+    "delivery_note": {
+      "type": "string"
+    },
+    "listing_content": {
+      "$ref": "listing-content.schema.json"
+    },
+    "image_plan": {
+      "$ref": "image-plan.schema.json"
+    },
+    "asset_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "claim_evidence_summary": {
+      "type": "object",
+      "required": [
+        "total_claims",
+        "fact_claims_count",
+        "unverified_fact_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_claims": { "type": "integer", "minimum": 0 },
+        "fact_claims_count": { "type": "integer", "minimum": 0 },
+        "unverified_fact_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "evidence_summary": {
+      "type": "object",
+      "required": [
+        "total_claims",
+        "fact_claims_count",
+        "unverified_fact_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_claims": { "type": "integer", "minimum": 0 },
+        "fact_claims_count": { "type": "integer", "minimum": 0 },
+        "unverified_fact_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "rights_summary": {
+      "type": "string"
+    },
+    "fulfillment_summary": {
+      "type": "string"
+    },
+    "validation_report_hash": {
+      "type": "string"
+    },
+    "human_review": {
+      "type": "object",
+      "required": [
+        "decision",
+        "reviewer",
+        "reviewed_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "$ref": "enums.schema.json#/definitions/HumanReviewDecision"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "snapshot_hashes": {
+          "type": "object"
+        }
+      }
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "package_hash": {
+      "type": "string"
+    },
+    "fulfillment_status": {
+      "$ref": "enums.schema.json#/definitions/FulfillmentStatus"
+    },
+    "package_status": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "READY_FOR_EXPORT",
+        "STALE",
+        "REJECTED"
+      ]
+    },
+    "stale_reason": {
+      "type": "string"
+    }
+  }
+}

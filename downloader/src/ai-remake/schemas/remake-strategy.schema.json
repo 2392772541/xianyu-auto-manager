@@ -1,0 +1,102 @@
+{
+  "": "remake-strategy.schema.json",
+  "title": "ProductRemakeStrategySet",
+  "description": "商品重制策略集合，包含最多 3 个候选策略与推荐 strategy_id",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "proposed_strategy_id",
+    "strategies"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "proposed_strategy_id": {
+      "type": "string"
+    },
+    "strategies": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "strategy_id",
+          "positioning",
+          "target_customer",
+          "main_selling_angle",
+          "title_direction",
+          "content_direction",
+          "image_direction",
+          "price_strategy",
+          "why_this_strategy_is_plausible",
+          "confidence_score",
+          "strategy_change_scope"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "strategy_id": {
+            "type": "string",
+            "pattern": "^strat_[a-zA-Z0-9_-]{4,32}$"
+          },
+          "positioning": {
+            "type": "string"
+          },
+          "target_customer": {
+            "type": "string"
+          },
+          "main_selling_angle": {
+            "type": "string"
+          },
+          "title_direction": {
+            "type": "string"
+          },
+          "content_direction": {
+            "type": "string"
+          },
+          "image_direction": {
+            "type": "string"
+          },
+          "price_strategy": {
+            "type": "object",
+            "required": [
+              "recommended_price",
+              "price_rationale"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "recommended_price": {
+                "type": "number",
+                "minimum": 0
+              },
+              "price_rationale": {
+                "type": "string"
+              }
+            }
+          },
+          "why_this_strategy_is_plausible": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "strategy_change_scope": {
+            "$ref": "enums.schema.json#/definitions/StrategyChangeScope"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "该策略引用的证据条目 ID"
+          }
+        }
+      }
+    }
+  }
+}

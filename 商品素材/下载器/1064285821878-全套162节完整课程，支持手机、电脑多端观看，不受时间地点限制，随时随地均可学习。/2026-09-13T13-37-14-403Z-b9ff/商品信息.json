@@ -1,0 +1,46 @@
+{
+  "id": "1064285821878",
+  "url": "https://www.goofish.com/item?id=1064285821878",
+  "title": "全套162节完整课程，支持手机、电脑多端观看，不受时间地点限制，随时随地均可学习。",
+  "description": "全套162节完整课程，支持手机、电脑多端观看，不受时间地点限制，随时随地均可学习。\n\n课程内容丰富详实，采用从基础到进阶的系统化编排，实用性强。涵盖审美认知建立、生活美学发现、经典美学作品赏析等核心模块，帮助你循序渐进搭建审美体系，全方位提升审美能力。学习方式灵活自由，可反复回看，省心省力。\n\n- 交付形式：电子虚拟课程，拍下后发送百度网盘链接\n​\n- 售后说明：虚拟商品一经售出，概不退换，不议价\n​\n- 客服说明：有任何问题可随时私信咨询，喜欢可直接拍电子资料",
+  "images": [
+    {
+      "position": 1,
+      "url": "https://img.alicdn.com/bao/uploaded/i4/2216780094433/O1CN01J9HxLL1icMuWa1kxs_!!4611686018427386849-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/01.webp",
+      "width": 1080,
+      "height": 1368,
+      "sha256": "37eb14586ebbee6eed4effab5fbb676d5cbc06ef5854cc65edee61969841c292"
+    },
+    {
+      "position": 2,
+      "url": "https://img.alicdn.com/bao/uploaded/i4/2216780094433/O1CN01JPD87h1icMuWjw6Ar_!!4611686018427386849-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/02.webp",
+      "width": 980,
+      "height": 1920,
+      "sha256": "a1e1db5f9869c8a8db56ce70ddd68f033deaaa4d487d71debd871afd9b4a317c"
+    },
+    {
+      "position": 3,
+      "url": "https://img.alicdn.com/bao/uploaded/i3/2216780094433/O1CN019I5UWb1icMuWjuM73_!!4611686018427386849-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/03.webp",
+      "width": 984,
+      "height": 1920,
+      "sha256": "be665b8d2110dfefd15051251110285b88a3efcd2e32d03f66f13534972bd449"
+    },
+    {
+      "position": 4,
+      "url": "https://img.alicdn.com/bao/uploaded/i4/2216780094433/O1CN01TtHDlU1icMuWjwMmv_!!4611686018427386849-53-xy_item.heic_Q90.jpg_.webp",
+      "file": "图片/04.webp",
+      "width": 988,
+      "height": 1920,
+      "sha256": "35175c245f26b0f0c1a81878eeb763ef8369b33ab3893b6103a5984ffeb76a66"
+    }
+  ],
+  "expected": 4,
+  "expanded": false,
+  "capturedAt": "2026-09-13T13:37:14.663Z",
+  "failed": [],
+  "complete": false,
+  "uniqueImages": 4
+}

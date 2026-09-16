@@ -1,0 +1,107 @@
+{
+  "": "product-dna.schema.json",
+  "title": "ProductDNA",
+  "description": "商品客观事实与理解模型，只回答商品是什么与核心资产，不包含主观商业打分",
+  "type": "object",
+  "required": [
+    "source_product_id",
+    "product_type",
+    "product_category",
+    "target_customer",
+    "customer_problem",
+    "purchase_motivation",
+    "usage_scenario",
+    "core_content",
+    "core_benefits",
+    "selling_points",
+    "keywords",
+    "delivery_type",
+    "risk_flags",
+    "unsupported_claims",
+    "missing_information",
+    "need_human_review"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_product_id": {
+      "type": "string"
+    },
+    "product_type": {
+      "type": "string",
+      "enum": [
+        "VIRTUAL_RESOURCE",
+        "PHYSICAL_GOODS",
+        "SERVICE",
+        "HYBRID",
+        "UNKNOWN"
+      ]
+    },
+    "product_category": {
+      "type": "string"
+    },
+    "target_customer": {
+      "type": "string"
+    },
+    "customer_problem": {
+      "type": "string"
+    },
+    "purchase_motivation": {
+      "type": "string"
+    },
+    "usage_scenario": {
+      "type": "string"
+    },
+    "core_content": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "core_benefits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "selling_points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "delivery_type": {
+      "": "enums.schema.json#/definitions/DeliveryType"
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": {
+        "": "enums.schema.json#/definitions/RiskFlag"
+      }
+    },
+    "unsupported_claims": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "need_human_review": {
+      "type": "boolean"
+    }
+  }
+}

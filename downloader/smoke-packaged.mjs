@@ -1,0 +1,24 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+import {unzipSync} from 'fflate';
+const dir=path.resolve(process.argv[2]);
+const ready=JSON.parse(await fs.readFile(path.join(dir,'ready.json'),'utf8'));
+const request=async(endpoint,body)=>{const r=await fetch(ready.url+endpoint,body?{method:'POST',headers:{Origin:ready.url,'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const j=await r.json();assert.equal(r.status,200,JSON.stringify(j));return j;};
+const initial=await request('/api/jobs');assert.equal(initial.jobs.length,0,'must start without user history');
+await request('/api/login',{});
+assert.equal((await request('/api/jobs')).browserOpen,true);
+const old=JSON.parse(await fs.readFile(new URL('./.local/jobs.json',import.meta.url),'utf8'));
+const product=old.find(j=>j.sourceProduct?.images.length===4).sourceProduct;
+await request('/api/import',{product});
+let result;
+for(let i=0;i<120;i++){const j=await request('/api/jobs');result=j.jobs[0];if(['done','partial','failed'].includes(result?.state))break;await new Promise(r=>setTimeout(r,1000));}
+assert.ok(['done','partial'].includes(result.state),result.message);assert.equal(result.images.length,4);assert.equal(result.failed.length,0);
+for(const im of result.images)await sharp(await fs.readFile(path.join(result.dir,im.file))).raw().toBuffer();
+const zip=unzipSync(await fs.readFile(result.dir+'.zip'));assert.equal(Object.keys(zip).length,6);
+assert.equal(await fs.readFile(path.join(result.dir,'文案.txt'),'utf8'),product.description);
+const report={testedAt:new Date().toISOString(),...ready,initialJobs:0,browserLaunched:true,downloaded:result.images.length,dimensions:result.images.map(i=>[i.width,i.height]),state:result.state,zipEntries:Object.keys(zip),artifact:result.dir,limitations:['Not tested on a separate physical computer','Login-based direct URL collection still requires user login']};
+await fs.writeFile(path.join(dir,'report.json'),JSON.stringify(report,null,2));
+await fs.writeFile(path.join(dir,'capture'),'');
+console.log(JSON.stringify(report,null,2));
